@@ -134,7 +134,7 @@ Runs after Task 8. The homelab runbook entry for removing `dev` holds the comman
 - Consumes: `ollama:11434`.
 - Produces: `http://litellm:4000`, aliases `chat`, `judge`, `chat-dev`, `embed`; Secret `directive-copilot-llm` keys `LITELLM_MASTER_KEY`, `OPENROUTER_API_KEY` (paths `directive-copilot/llm#<KEY>`).
 
-- [ ] **Step 1: Write `litellm-config.yaml`** (IDs checked against `openrouter.ai/api/v1/models` on 2026-11-26):
+- [x] **Step 1: Write `litellm-config.yaml`** (IDs checked against `openrouter.ai/api/v1/models` on 2026-11-26):
 
 | `model_name` | `litellm_params` |
 | --- | --- |
@@ -145,15 +145,15 @@ Runs after Task 8. The homelab runbook entry for removing `dev` holds the comman
 
 OpenRouter entries use `api_key: os.environ/OPENROUTER_API_KEY`; `general_settings.master_key: os.environ/LITELLM_MASTER_KEY`. No database.
 
-- [ ] **Step 2: Forwarding check** (one-off, Docker, no real key, script in the scratchpad). Run the pinned LiteLLM image with this config, dummy keys and `OPENROUTER_API_BASE` pointing at a local server that records request bodies and returns a minimal chat completion. Send one request each to `chat`, `judge`, `chat-dev`. Assert:
+- [x] **Step 2: Forwarding check** (one-off, Docker, no real key, script in the scratchpad). Run the pinned LiteLLM image with this config, dummy keys and `OPENROUTER_API_BASE` pointing at a local server that records request bodies and returns a minimal chat completion. Send one request each to `chat`, `judge`, `chat-dev`. Assert:
   - `chat`: `model == "openai/gpt-6-luna"`, `provider == {"only": ["openai"], "allow_fallbacks": false}`, effort `low` (`reasoning_effort` or `reasoning.effort`).
   - `judge`: same with `anthropic/claude-haiku-5.5` and `["anthropic"]`.
   - `chat-dev`: `model == "openrouter/free"`.
   - A request without the master key gets 401.
 
   If effort is dropped or rejected, move it to `extra_body.reasoning: {effort: low}` and rerun. `embed` needs the real Ollama: run it alongside if disk allows, expect length 768; otherwise Task 7 covers it.
-- [ ] **Step 3:** Manifests: Deployment `litellm`, uid 65532 (the image's user), args `--config /app/config/config.yaml --port 4000`, config from a `configMapGenerator` (key `config.yaml`), probes `/health/liveliness` and `/health/readiness`, requests `100m`/`512Mi`, memory limit `1536Mi`, both keys from the Secret. Add both placeholders to `prod/secret.yaml` and both paths (`directive-copilot/db`, `directive-copilot/llm`) under `kv-prod` in `secret.yaml.example`. Confirm the container starts as that uid in Docker.
-- [ ] **Step 4:** ADR 0035: app on `prod`, Postgres and dumps on two `nfs-prod` volumes, same-SSD limit, no operator. Runbooks: "Check directive-copilot" in `checks.md` (Task 7 steps 4 to 6 as commands, keys read without echo) and "Dump directive-copilot's database" in `backups-and-recovery.md` (manual Job from the CronJob; retained-volume note). Add the app to both READMEs.
+- [x] **Step 3:** Manifests: Deployment `litellm`, uid 65532 (the image's user), args `--config /app/config/config.yaml --port 4000`, config from a `configMapGenerator` (key `config.yaml`), probes `/health/liveliness` and `/health/readiness`, requests `100m`/`512Mi`, memory limit `1536Mi`, both keys from the Secret. Add both placeholders to `prod/secret.yaml` and both paths (`directive-copilot/db`, `directive-copilot/llm`) under `kv-prod` in `secret.yaml.example`. Confirm the container starts as that uid in Docker.
+- [x] **Step 4:** ADR 0035: app on `prod`, Postgres and dumps on two `nfs-prod` volumes, same-SSD limit, no operator. Runbooks: "Check directive-copilot" in `checks.md` (Task 7 steps 4 to 6 as commands, keys read without echo) and "Dump directive-copilot's database" in `backups-and-recovery.md` (manual Job from the CronJob; retained-volume note). Add the app to both READMEs.
 - [ ] **Step 5:** `scripts/check-manifests.sh`, `scripts/check-runbooks.sh`, `pre-commit run --all-files` pass. Commit `feat: add litellm gateway`, push, open a ready PR with the owner steps linked. Remove the test images.
 
 ### Task 7: Owner, secrets, deploy and prove
@@ -172,9 +172,9 @@ Changes Task 2's result: the owner chose to destroy the two kubeadm VMs. Runs be
 
 **Files:** `terraform/environments/dev/{main.tf,outputs.tf,dev.tftest.hcl}`, ADR 0034 and its index row (unmerged, may be renamed), ADR 0028 Status line, the "Pause and resume dev" runbook entry, and every doc note Task 2 added.
 
-- [ ] **Step 1: Failing test.** `dev.tftest.hcl` asserts the root plans `claude-code` (name and vmid 102) and no longer expects kubeadm nodes. Run `terraform test`: FAIL while the outputs and module remain as they are.
-- [ ] **Step 2:** Remove `module "kubeadm-dev"` and the outputs that only describe it. `module "claude_code"` is unchanged. Keep variables, `ansible/` dev files and `argocd/apps/*/dev/` so a rebuild is a restore from git; satisfy tflint without deleting what a rebuild needs. No `removed` or `moved` block: the destroy is intended.
-- [ ] **Step 3:** `terraform test`, `terraform fmt -check`, `tflint`, `scripts/check-manifests.sh`, `scripts/check-runbooks.sh` pass.
-- [ ] **Step 4:** ADR 0034 states: `dev` destroyed, how to rebuild, old `nfs-dev` directories remain on `nfs-01`, no staging.
-- [ ] **Step 5:** Runbook: remove-`dev` entry (merge, confirm apps `Unknown`, delete apps, apply `dev` with exactly 2 destroy, grow `prod`) with the existing stop gates, never `terraform destroy` in this root; and a rebuild order (shrink `prod`, restore module, outputs, test, app entries and `clusters-dev.yaml`, apply, Ansible, register). Remove pause-only steps (`start_at_node_boot`, shutting down and starting VMs) and `-target` warnings in docs that no longer apply.
-- [ ] **Step 6:** Commit `ops: remove dev cluster from terraform`.
+- [x] **Step 1: Failing test.** `dev.tftest.hcl` asserts the root plans `claude-code` (name and vmid 102) and no longer expects kubeadm nodes. Run `terraform test`: FAIL while the outputs and module remain as they are.
+- [x] **Step 2:** Remove `module "kubeadm-dev"` and the outputs that only describe it. `module "claude_code"` is unchanged. Keep variables, `ansible/` dev files and `argocd/apps/*/dev/` so a rebuild is a restore from git; satisfy tflint without deleting what a rebuild needs. No `removed` or `moved` block: the destroy is intended.
+- [x] **Step 3:** `terraform test`, `terraform fmt -check`, `tflint`, `scripts/check-manifests.sh`, `scripts/check-runbooks.sh` pass.
+- [x] **Step 4:** ADR 0034 states: `dev` destroyed, how to rebuild, old `nfs-dev` directories remain on `nfs-01`, no staging.
+- [x] **Step 5:** Runbook: remove-`dev` entry (merge, confirm apps `Unknown`, delete apps, apply `dev` with exactly 2 destroy, grow `prod`) with the existing stop gates, never `terraform destroy` in this root; and a rebuild order (shrink `prod`, restore module, outputs, test, app entries and `clusters-dev.yaml`, apply, Ansible, register). Remove pause-only steps (`start_at_node_boot`, shutting down and starting VMs) and `-target` warnings in docs that no longer apply.
+- [x] **Step 6:** Commit `ops: remove dev cluster from terraform`.
