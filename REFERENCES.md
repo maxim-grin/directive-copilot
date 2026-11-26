@@ -117,10 +117,8 @@ Sources behind the design of Directive Copilot, grouped by topic. Each entry has
 
 ## 5. Homelab platform (Kubernetes)
 
-- **CloudNativePG: image volume extensions.** Running Postgres with pgvector in the cluster (needs PostgreSQL 18+ for this method).
-  https://cloudnative-pg.io/docs/1.30/imagevolume_extensions
-- **CloudNativePG: creating a custom container image.** The alternative for Postgres 16/17: bake pgvector into the image.
-  https://cloudnative-pg.io/blog/building-images-bake/
+- **Argo CD best practices: separating config vs. source code repositories.** Keep manifests apart from application source.
+  https://argo-cd.readthedocs.io/en/stable/user-guide/best_practices/
 - **LiteLLM: Ollama provider.** How LiteLLM serves the local embedding model.
   https://docs.litellm.ai/docs/providers/ollama
 - **Ollama.**

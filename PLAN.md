@@ -351,7 +351,7 @@ deploy/             # Azure only; homelab manifests live in the homelab repo
     variables.tf  # location, name prefix, image_tag, model names, sizes
     outputs.tf    # app URL, ACR login server, Postgres host
     terraform.tfvars.example   # copy to terraform.tfvars (gitignored)
-    litellm-config.yaml           # Azure targets for the model aliases
+    litellm-config.yaml        # Azure targets for the model aliases
     bootstrap/    # one-off: storage account + container for remote state
 services/
   decision/       # FastAPI wrapper around gliner2 + GLiNER2.5-Decide: /decide, /healthz; own Dockerfile and pyproject
@@ -404,7 +404,7 @@ AZURE_RESOURCE_GROUP=...
 | `chat` | `openrouter/openai/gpt-6-luna`, provider pinned to OpenAI, low reasoning effort | GPT-6 Luna deployment in Microsoft Foundry |
 | `judge` | `openrouter/anthropic/claude-haiku-5.5`, provider pinned to Anthropic, low effort | Claude Haiku 5.5 deployment in Microsoft Foundry (hosted on Azure) |
 | `chat-dev` | `openrouter/openrouter/free` (OpenRouter's free-model router) | not defined |
-| `embed` | `ollama/nomic-embed-text` | Azure embedding deployment |
+| `embed` | `ollama/nomic-embed-text:v1.5` | Azure embedding deployment |
 
 - **Pin providers** in the OpenRouter aliases (provider routing, fallbacks off) so an eval run can't silently move between hosts. Turn on zero data retention in the OpenRouter account.
 - Check during milestone 0 that LiteLLM's model IDs match OpenRouter's current catalogue, and during milestone 8 that LiteLLM can reach Claude on Foundry; if not, point `judge` at the Anthropic API directly for the Azure stage.
