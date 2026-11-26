@@ -116,11 +116,11 @@ Runs after Task 8. The homelab runbook entry for removing `dev` holds the comman
 - Produces: `http://ollama:11434` serving `nomic-embed-text:v1.5`.
 - `pull-model.sh`: env `MODEL`; starts `ollama serve` in the background, waits up to 60 s for it, exits 0 if `ollama show "$MODEL"` succeeds, otherwise `ollama pull "$MODEL"`; non-zero on timeout or pull failure.
 
-- [ ] **Step 1: Failing check** (one-off, Docker): run the script in the Ollama image as `--user 10001:10001`, `HOME=/models`, `OLLAMA_MODELS=/models`, on a volume made mode 0777 (as the NFS share is). Expected: FAIL, script missing.
-- [ ] **Step 2:** Write the script. First run exits 0 after pulling. Second run with `--network none` exits 0 without pulling.
-- [ ] **Step 3:** Start the server on the same volume and user; `POST /v1/embeddings` with `{"model":"nomic-embed-text:v1.5","input":"hello"}` returns `.data[0].embedding` of length 768.
-- [ ] **Step 4:** Manifests: Deployment `ollama`, 1 replica, `Recreate`; uid, gid, `fsGroup` 10001; init container `pull-model` and server share env and the PVC `ollama-models` (`2Gi`); `OLLAMA_NUM_PARALLEL=1`; HTTP readiness and liveness on `/`; server requests `100m`/`512Mi`, limits `cpu: 2`, `memory: 2Gi`; script from a `configMapGenerator`.
-- [ ] **Step 5:** `shellcheck` the script (add to the CI list); `scripts/check-manifests.sh` ok. Commit `feat: add ollama embeddings`. Remove the Ollama image.
+- [x] **Step 1: Failing check** (one-off, Docker): run the script in the Ollama image as `--user 10001:10001`, `HOME=/models`, `OLLAMA_MODELS=/models`, on a volume made mode 0777 (as the NFS share is). Expected: FAIL, script missing.
+- [x] **Step 2:** Write the script. First run exits 0 after pulling. Second run with `--network none` exits 0 without pulling.
+- [x] **Step 3:** Start the server on the same volume and user; `POST /v1/embeddings` with `{"model":"nomic-embed-text:v1.5","input":"hello"}` returns `.data[0].embedding` of length 768.
+- [x] **Step 4:** Manifests: Deployment `ollama`, 1 replica, `Recreate`; uid, gid, `fsGroup` 10001; init container `pull-model` and server share env and the PVC `ollama-models` (`2Gi`); `OLLAMA_NUM_PARALLEL=1`; HTTP readiness and liveness on `/`; server requests `100m`/`512Mi`, limits `cpu: 2`, `memory: 2Gi`; script from a `configMapGenerator`.
+- [x] **Step 5:** `shellcheck` the script (add to the CI list); `scripts/check-manifests.sh` ok. Commit `feat: add ollama embeddings`. Remove the Ollama image.
 
 ### Task 6: HL, LiteLLM, docs and PR
 
