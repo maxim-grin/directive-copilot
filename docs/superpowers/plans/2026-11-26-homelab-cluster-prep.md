@@ -4,7 +4,7 @@
 
 **Goal:** Postgres + pgvector, local embeddings and a LiteLLM gateway running on the Talos `prod` cluster, every model alias proven with `curl`.
 
-**Architecture:** `dev` is paused and its memory moves to the `prod` workers. A new ArgoCD app, `directive-copilot`, in the homelab repo holds three workloads and a backup CronJob. Agents write and verify the PRs; the owner merges, applies and restarts.
+**Architecture:** the `dev` Kubernetes cluster is destroyed and its memory moves to the `prod` workers. A new ArgoCD app, `directive-copilot`, in the homelab repo holds three workloads and a backup CronJob. Agents write and verify the PRs; the owner merges, applies and restarts.
 
 **Tech Stack:** Terraform (`telmate/proxmox`), ArgoCD + Kustomize, argocd-vault-plugin, `pgvector/pgvector`, Ollama, LiteLLM proxy, OpenRouter.
 
@@ -48,6 +48,8 @@
 - [x] **Step 5:** Commit `chore: drop in-repo kubernetes checks`, push, `gh pr ready 1`.
 
 ### Task 2: HL, pause `dev` and grow `prod` (branch `feat/pause-dev-grow-prod`)
+
+> **Historical.** Done as written, then changed by Task 8: `dev` is destroyed, not paused. Where they differ, Task 8 and the design win.
 
 **Files:**
 - Modify: `argocd/apps/{cert-manager,cert-manager-issuers,ingress-nginx,jobboard,kube-prometheus-stack,monitoring-secrets,nfs-provisioner,shortener}/config.yaml`
