@@ -92,20 +92,20 @@ Runs after Task 8. The homelab runbook entry for removing `dev` holds the comman
 - Produces: Secret `directive-copilot-db` key `POSTGRES_PASSWORD`; database and user `copilot` on `postgres:5432`; `base/kustomization.yaml`, which Tasks 5 and 6 extend.
 - `backup.sh`: env `BACKUP_DIR` (default `/backup`) plus libpq `PG*`. Dumps with `pg_dump -Fc` to `<name>.partial`, checks it with `pg_restore --list`, renames to `copilot-YYYYMMDDTHHMMSSZ.dump`, then keeps the 14 newest `*.dump` by name. Any failure: exit non-zero, remove the partial, prune nothing.
 
-- [ ] **Step 1: Failing test** with stub `pg_dump` / `pg_restore` on `PATH`, in the style of `scripts/tests/verify-dev.test.sh`. Cases:
+- [x] **Step 1: Failing test** with stub `pg_dump` / `pg_restore` on `PATH`, in the style of `scripts/tests/verify-dev.test.sh`. Cases:
   - 15 old dumps + success: exit 0, exactly 14 `*.dump`, the new one present, the two oldest gone.
   - `pg_dump` exits 1: non-zero exit, all 15 old dumps still there, no new `*.dump`, no `*.partial`.
   - `pg_restore` exits 1: same assertions.
-- [ ] **Step 2:** Run it. Expected: FAIL, script missing.
-- [ ] **Step 3:** Write `backup.sh`; run the test to PASS; `shellcheck` both.
-- [ ] **Step 4:** Write the manifests, following `argocd/apps/jobboard` and `shortener`.
+- [x] **Step 2:** Run it. Expected: FAIL, script missing.
+- [x] **Step 3:** Write `backup.sh`; run the test to PASS; `shellcheck` both.
+- [x] **Step 4:** Write the manifests, following `argocd/apps/jobboard` and `shortener`.
   - `config.yaml`: one `prod` entry, `createNamespace`, `serverSideApply`, `serverSideDiff` all `true` (ADR 0030).
   - Namespace labelled `pod-security.kubernetes.io/enforce: restricted`.
   - StatefulSet `postgres`, 1 replica: uid, gid and `fsGroup` 999; `POSTGRES_USER`/`POSTGRES_DB` `copilot`; `PGDATA=/var/lib/postgresql/data/pgdata`; `POSTGRES_INITDB_ARGS="--locale=en_US.UTF-8 --encoding=UTF8"`; `pg_isready` probes; requests `100m`/`256Mi`, memory limit `1Gi`; claim template `data`, `10Gi`, with `apiVersion` and `kind` spelled out.
   - CronJob `postgres-backup`: Postgres image, `0 9 * * *`, `concurrencyPolicy: Forbid`, `restartPolicy: Never`, same uid, script from a `configMapGenerator`, PVC `postgres-backup` `5Gi`, `PGHOST=postgres`.
   - `prod/secret.yaml`: placeholder `<path:kv-prod/data/directive-copilot/db#POSTGRES_PASSWORD>`.
-- [ ] **Step 5: Real restore check** (one-off, not committed): start the pgvector image with `--user 999:999`, run `backup.sh` against it from the same image. Expected: one `.dump`, and `psql -tAc "select default_version from pg_available_extensions where name='vector'"` prints `0.8.7`.
-- [ ] **Step 6:** `scripts/check-manifests.sh` ok and lists `prod-directive-copilot`. Commit `feat: add directive-copilot database`.
+- [x] **Step 5: Real restore check** (one-off, not committed): start the pgvector image with `--user 999:999`, run `backup.sh` against it from the same image. Expected: one `.dump`, and `psql -tAc "select default_version from pg_available_extensions where name='vector'"` prints `0.8.7`.
+- [x] **Step 6:** `scripts/check-manifests.sh` ok and lists `prod-directive-copilot`. Commit `feat: add directive-copilot database`.
 
 ### Task 5: HL, Ollama for embeddings
 
