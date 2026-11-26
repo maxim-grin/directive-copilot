@@ -41,10 +41,10 @@
 
 **Files:** Modify `Makefile`, `.github/workflows/ci.yml`, `README.md`.
 
-- [ ] **Step 1:** In `Makefile`, remove `K8S_OVERLAY`, the `kubectl` presence check and the `kubectl kustomize` line from `check-infra`; its help text becomes `Terraform fmt + validate (no cloud access)`.
-- [ ] **Step 2:** In `ci.yml`, remove the `azure/setup-kubectl` step; in the `infra` job comment, say Terraform only.
-- [ ] **Step 3:** In `README.md`, say the homelab app is deployed from the `homelab` repo, that the port-forwards need the `prod` kube context, and change the `check-infra` comment to `Terraform validation, no cloud access`.
-- [ ] **Step 4: Verify.** `grep -rnE 'kubectl kustomize|K8S_OVERLAY|setup-kubectl|Kustomize \+' Makefile .github README.md` prints nothing; `make lint test` passes. `make check-infra` still fails until `deploy/azure/` exists; CI runs it only on `deploy/` changes.
+- [x] **Step 1:** In `Makefile`, remove `K8S_OVERLAY`, the `kubectl` presence check and the `kubectl kustomize` line from `check-infra`; its help text becomes `Terraform fmt + validate (no cloud access)`.
+- [x] **Step 2:** In `ci.yml`, remove the `azure/setup-kubectl` step; in the `infra` job comment, say Terraform only.
+- [x] **Step 3:** In `README.md`, say the homelab app is deployed from the `homelab` repo, that the port-forwards need the `prod` kube context, and change the `check-infra` comment to `Terraform validation, no cloud access`.
+- [x] **Step 4: Verify.** `grep -rnE 'kubectl kustomize|K8S_OVERLAY|setup-kubectl|Kustomize \+' Makefile .github README.md` prints nothing; `make lint test` passes. `make check-infra` still fails until `deploy/azure/` exists; CI runs it only on `deploy/` changes.
 - [ ] **Step 5:** Commit `chore: drop in-repo kubernetes checks`, push, `gh pr ready 1`.
 
 ### Task 2: HL, pause `dev` and grow `prod` (branch `feat/pause-dev-grow-prod`)
