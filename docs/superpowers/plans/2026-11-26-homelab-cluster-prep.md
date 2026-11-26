@@ -58,14 +58,14 @@
 
 Keep every `argocd/apps/*/dev/` directory, `argocd/apps/clusters/dev/` and the VM definitions: resuming `dev` must be a revert.
 
-- [ ] **Step 1: Failing tests.** In `dev.tftest.hcl` flip the boot assertion to `alltrue([... : !n.start_at_node_boot])`, message `dev is paused: neither node starts at node boot`. In `prod.tftest.hcl` add `run "node_defaults"` asserting `var.node_cores == 4 && var.node_disk_size == "40G"`.
-- [ ] **Step 2:** In each of the two environment directories run `terraform init -backend=false && terraform test`. Expected: the new assertions FAIL.
-- [ ] **Step 3:** Set `start_at_node_boot = false` on `module "kubeadm-dev"` only (`claude_code` stays `true`). Change the two `prod` defaults. In the example tfvars set both workers to `memory = 7168`, with a comment that `dev`'s 6 GB moved here.
-- [ ] **Step 4:** `terraform test` passes in both; `terraform fmt -check -recursive terraform` is clean.
-- [ ] **Step 5:** Remove only the `env: dev` entry (and comments about it) from the eight `config.yaml` files; delete `clusters-dev.yaml`.
-- [ ] **Step 6:** `grep -rn 'env: dev' argocd/apps/*/config.yaml` prints nothing; `scripts/check-manifests.sh` ends `check-manifests: ok`.
-- [ ] **Step 7:** ADR 0034: `dev` paused, memory and sizes as above, no staging (suspends the dev-first step of 0028), disks grown because the new app's images do not fit 20 GB, rejected options from the spec. Add its index row.
-- [ ] **Step 8:** Runbook entry "Pause and resume dev" holding Task 3's commands (with `$PROD_KC`) and the reverse order for resuming (shrink `prod`, start the VMs, revert, `dev_register` playbook). Mark `dev` as paused wherever the listed docs describe it as running, including "promote jobboard" (new tags now go straight to `prod`).
+- [x] **Step 1: Failing tests.** In `dev.tftest.hcl` flip the boot assertion to `alltrue([... : !n.start_at_node_boot])`, message `dev is paused: neither node starts at node boot`. In `prod.tftest.hcl` add `run "node_defaults"` asserting `var.node_cores == 4 && var.node_disk_size == "40G"`.
+- [x] **Step 2:** In each of the two environment directories run `terraform init -backend=false && terraform test`. Expected: the new assertions FAIL.
+- [x] **Step 3:** Set `start_at_node_boot = false` on `module "kubeadm-dev"` only (`claude_code` stays `true`). Change the two `prod` defaults. In the example tfvars set both workers to `memory = 7168`, with a comment that `dev`'s 6 GB moved here.
+- [x] **Step 4:** `terraform test` passes in both; `terraform fmt -check -recursive terraform` is clean.
+- [x] **Step 5:** Remove only the `env: dev` entry (and comments about it) from the eight `config.yaml` files; delete `clusters-dev.yaml`.
+- [x] **Step 6:** `grep -rn 'env: dev' argocd/apps/*/config.yaml` prints nothing; `scripts/check-manifests.sh` ends `check-manifests: ok`.
+- [x] **Step 7:** ADR 0034: `dev` paused, memory and sizes as above, no staging (suspends the dev-first step of 0028), disks grown because the new app's images do not fit 20 GB, rejected options from the spec. Add its index row.
+- [x] **Step 8:** Runbook entry "Pause and resume dev" holding Task 3's commands (with `$PROD_KC`) and the reverse order for resuming (shrink `prod`, start the VMs, revert, `dev_register` playbook). Mark `dev` as paused wherever the listed docs describe it as running, including "promote jobboard" (new tags now go straight to `prod`).
 - [ ] **Step 9:** `scripts/check-runbooks.sh` and `pre-commit run --all-files` pass. Commit `ops: pause dev and grow prod`, push, open a ready PR whose description links the runbook entry.
 
 ### Task 3: Owner, roll out capacity
