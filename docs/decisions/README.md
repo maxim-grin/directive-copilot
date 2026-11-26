@@ -29,6 +29,7 @@ record accepts an edit to its Status line and nothing else.
 | --- | --- | --- |
 | [0001](0001-homelab-first-config-only-move-to-azure.md) | Homelab first; the move to Azure is config-only | Accepted |
 | [0002](0002-confidence-comes-from-a-pluggable-judge.md) | Confidence comes from a pluggable judge, never the answering model | Accepted |
-| [0003](0003-kustomize-on-the-homelab-terraform-on-azure.md) | Kustomize on the homelab, Terraform on Azure | Accepted |
+| [0003](0003-kustomize-on-the-homelab-terraform-on-azure.md) | Kustomize on the homelab, Terraform on Azure | Superseded by 0006 |
 | [0004](0004-tools-enforce-rules-the-makefile-owns-commands.md) | Tools enforce rules; the Makefile owns the commands | Accepted |
 | [0005](0005-hosted-llms-same-models-in-both-environments.md) | Hosted LLMs, the same models in both environments | Accepted |
+| [0006](0006-argocd-manifests-in-homelab-terraform-on-azure.md) | ArgoCD manifests in the homelab repo, Terraform on Azure | Accepted |

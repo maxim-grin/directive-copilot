@@ -59,13 +59,17 @@ Questions to ask once it's running:
 
 Prerequisites: `uv`, Node 22, and access to the homelab cluster (Postgres +
 pgvector and LiteLLM running in the `directive-copilot` namespace, with an
-OpenRouter key in LiteLLM's Secret). Set `CHAT_MODEL=chat-dev` while
+OpenRouter key in LiteLLM's Secret). The homelab app is deployed from the
+`homelab` repo, not this one. Set `CHAT_MODEL=chat-dev` while
 building to use a free model; evals need the paid `chat` and `judge`.
 
 ```bash
 uv sync --group dev && uv run pre-commit install
 npm --prefix web ci
 
+# The commands need the current kube context to be the `prod` cluster. Claude
+# Code's hook also only allows a context named `homelab`, or the name in
+# DC_KUBE_CONTEXT (kubectl itself ignores that variable).
 kubectl -n directive-copilot port-forward svc/postgres 5432 &
 kubectl -n directive-copilot port-forward svc/litellm 4000 &
 
@@ -82,10 +86,12 @@ Configuration is environment variables only: see the Config section of
 make help              # list targets
 make lint test         # what the pre-push hook and CI run for Python
 make check-web         # frontend checks + generated API types up to date
-make check-infra       # Kustomize + Terraform validation, no cloud access
+make check-infra       # Terraform validation, no cloud access
 make test-integration  # needs DATABASE_URL (Postgres + pgvector)
 make eval              # real models; costs money
 ```
+
+Warning: the port-forwarded database is the live one on `prod` (there is no staging), so run `make test-integration` only against a throwaway Postgres.
 
 The same targets run in Claude Code hooks, pre-commit and CI.
 

@@ -8,7 +8,7 @@ milestones and definition of done. `README.md` covers running it,
 
 A small RAG + agentic workflow app that answers questions about Alberta Energy Regulator (AER) directives, cites the exact clause it used, and sends low-confidence answers to a human reviewer before they're released. It tracks what every answer costs, in LLM tokens and in infrastructure, and measures its own quality with an evaluation set and a pluggable judge.
 
-It's built to run **first on a homelab Kubernetes cluster** (a single CPU-only mini PC, with the chat models hosted), then **on Azure** with no code changes: only configuration and infrastructure differ.
+It's built to run **first on a homelab Kubernetes cluster** (VMs on a single CPU-only mini PC, with the chat models hosted), then **on Azure** with no code changes: only configuration and infrastructure differ.
 
 ## The 30-second "aha"
 
@@ -43,25 +43,26 @@ The same container image runs in both. Everything that differs is an environment
 
 **Homelab hardware:** one mini PC, Intel i5-10500T (6 cores, 35 W TDP), 32 GB DDR4, 1 TB SSD, **no GPU**. That decides what runs locally: Postgres, embeddings and the CPU decision model do; chat models don't.
 
+It runs Proxmox and is shared with other workloads. The app goes on the Talos `prod` cluster (one 4 GB control plane, two 7 GB workers, 4 vCPU each), delivered by ArgoCD from the [homelab](https://github.com/maxim-grin/homelab) repo ([ADR 0006](docs/decisions/0006-argocd-manifests-in-homelab-terraform-on-azure.md)).
 
 | Concern | homelab (stage 1) | azure (final stage) |
 |---|---|---|
-| Runtime | k3s (single node): Deployment + Service + Ingress | Azure Container Apps |
+| Runtime | Talos Kubernetes: Deployment + Service + Ingress (ingress-nginx, cert-manager TLS) | Azure Container Apps |
 | One-off tasks (migrate, ingest, evals) | Kubernetes Jobs | Container Apps Jobs |
 | Scheduled cost refresh | Kubernetes CronJob | Container Apps scheduled Job |
-| Database | Postgres 16 + pgvector, one instance (CloudNativePG, or a StatefulSet with `pgvector/pgvector:pg16`) on local-path storage; nightly `pg_dump` CronJob, since there's no replica | Azure Database for PostgreSQL Flexible Server with the `vector` extension allow-listed |
+| Database | Postgres 16 + pgvector, a one-replica StatefulSet (`pgvector/pgvector:pg16`) on `nfs-prod` storage; nightly `pg_dump` CronJob to a second `nfs-prod` volume (same SSD: covers a bad migration or deleted data, not a lost disk) | Azure Database for PostgreSQL Flexible Server with the `vector` extension allow-listed |
 | LLM gateway | LiteLLM in the cluster: the app's one OpenAI-compatible endpoint, mapping aliases to providers | LiteLLM as a Container App, same aliases, different targets |
 | Answers (`chat`) | GPT-6 Luna via OpenRouter, provider pinned to OpenAI | GPT-6 Luna via Microsoft Foundry |
 | LLM judge (`judge`) | Claude Haiku 5.5 via OpenRouter, provider pinned to Anthropic | Claude Haiku 5.5 via Microsoft Foundry (hosted on Azure) |
 | Development (`chat-dev`) | A free OpenRouter model (`openrouter/free`); never used for evals or the demo | Not deployed |
 | Embeddings (`embed`) | `nomic-embed-text` (768-dim) on Ollama, CPU, one request at a time | An Azure embedding model (1536-dim); re-ingest |
 | Decision judge | GLiNER2.5-Decide in the cluster (CPU) | The same image as an internal-only Container App |
-| Secrets | Kubernetes Secret → env vars (optionally SOPS / Sealed Secrets) | Container Apps secrets (optionally Key Vault references) → the same env vars |
-| Image registry | Homelab registry or GHCR | Azure Container Registry |
+| Secrets | Vault (`kv-prod/directive-copilot/`) → argocd-vault-plugin → Kubernetes Secret → env vars | Container Apps secrets (optionally Key Vault references) → the same env vars |
+| Image registry | GHCR | Azure Container Registry |
 | PDFs | Baked into the image under `data/raw/` (public documents) | Same image |
 | LLM billing | OpenRouter prepaid credits (no monthly expiry; may expire 1 year after purchase); auto top-up off | Azure pay-as-you-go, billed monthly for use |
 | Infra cost | `config/infra.homelab.yaml` estimate (measured power draw + hardware share + amortised OpenRouter top-up fee) | `config/infra.azure.yaml` estimate, optionally Azure Cost Management actuals |
-| Deploy tooling | Kustomize (`deploy/k8s/`) | Terraform with the `azurerm` provider (`deploy/azure/`) |
+| Deploy tooling | ArgoCD + Kustomize, manifests in the homelab repo (`argocd/apps/directive-copilot/`); merging there deploys | Terraform with the `azurerm` provider (`deploy/azure/`) |
 
 The app never calls an Azure-specific SDK for secrets, storage or models: config arrives as env vars, the PDFs ship in the image, and every model call goes through LiteLLM by alias. Moving to Azure changes LiteLLM's config, not the app.
 
@@ -79,7 +80,7 @@ The same two models run in both environments, so the homelab-vs-Azure comparison
 | UI | React + TypeScript SPA (Vite), TanStack Query, React Router; built to static files and served by FastAPI |
 | API types | Generate a TS client from FastAPI's OpenAPI schema (`openapi-typescript`) so types stay in sync |
 | Packaging | `uv`, multi-stage Dockerfile |
-| Deploy | Kustomize on the homelab; Terraform (`azurerm`) on Azure |
+| Deploy | ArgoCD on the homelab; Terraform (`azurerm`) on Azure |
 | Tests | pytest |
 
 ## Architecture
@@ -110,14 +111,14 @@ question ──▶│  retrieve    │  hybrid search: pgvector + Postgres full-
 ### Homelab deployment
 
 ```
-namespace: directive-copilot (k3s, one node)
+namespace: directive-copilot (Talos prod cluster)
 ┌────────────────────────────────────────────────────────────────────────────┐
 │ Ingress ─▶ Service ─▶ app (FastAPI + SPA)                                  │
 │                        │      │       │                                    │
 │              ┌─────────┘      │       └──▶ decision (GLiNER2.5-Decide, CPU)│
 │              ▼                ▼                                            │
 │   Postgres + pgvector      LiteLLM ─▶ Ollama (embed only)                  │
-│   (local-path PVC)            │                                            │
+│   (nfs-prod PVC)              │                                            │
 │                               └────────────────────────────────────────────┼──▶ OpenRouter ─▶ GPT-6 Luna (chat)
 │                                                                            │                ─▶ Claude Haiku 5.5 (judge)
 │ Jobs: migrate · ingest · eval                                              │                ─▶ free model (chat-dev)
@@ -339,14 +340,7 @@ web/              # Vite + React + TS
     pages/        # AskPage.tsx, ReviewPage.tsx, EvalsPage.tsx, CostsPage.tsx, RunPage.tsx
     components/   # AnswerCard, CitationList, ReviewItem, EvalTable, CompareTable, CostBadge, CostChart
   vite.config.ts  # dev proxy: /api -> http://localhost:8000
-deploy/
-  k8s/
-    base/         # app Deployment/Service/Ingress, migrate/ingest/eval Jobs, costs CronJob
-    postgres/     # CloudNativePG Cluster (or StatefulSet) with pgvector
-    llm/          # LiteLLM Deployment + ConfigMap (model aliases) + Secret (OpenRouter key); Ollama for embeddings only
-    postgres-backup/  # nightly pg_dump CronJob
-    decision/     # GLiNER2.5-Decide Deployment + Service (CPU, model cache on a PVC)
-    overlays/homelab/   # hostnames, storage class, image tag, CPU/memory limits sized for one 6-core node
+deploy/             # Azure only; homelab manifests live in the homelab repo
   azure/
     versions.tf   # terraform + azurerm provider pins, backend "azurerm" (remote state)
     main.tf       # resource group, tags, Log Analytics
@@ -357,6 +351,7 @@ deploy/
     variables.tf  # location, name prefix, image_tag, model names, sizes
     outputs.tf    # app URL, ACR login server, Postgres host
     terraform.tfvars.example   # copy to terraform.tfvars (gitignored)
+    litellm-config.yaml        # Azure targets for the model aliases
     bootstrap/    # one-off: storage account + container for remote state
 services/
   decision/       # FastAPI wrapper around gliner2 + GLiNER2.5-Decide: /decide, /healthz; own Dockerfile and pyproject
@@ -365,7 +360,7 @@ evals/cases.yaml
 tests/            # unit tests for fact checks, citation checks, cost math; graph test with a fake LLM + fake judge
 Dockerfile        # multi-stage: node builds web/dist, python image serves API + static
 Makefile          # every check command (fmt, lint, test, check-web, check-infra, eval);
-                  # deploy targets (deploy-homelab, migrate, ingest, deploy-azure) added per milestone
+                  # deploy targets (deploy-azure) added per milestone
 CLAUDE.md         # how agents work on the repo; rules that tools enforce point at the tool
 PLAN.md           # this file
 REFERENCES.md     # sources
@@ -378,7 +373,7 @@ tools/
 
 ## Config
 
-All config is env vars (read by `settings.py`). On the homelab they come from a ConfigMap + Secret; on Azure from Container Apps env vars + secrets. `.env` for local runs is never committed.
+All config is env vars (read by `settings.py`). On the homelab they come from a ConfigMap + Secret defined in the homelab repo; on Azure from Container Apps env vars + secrets. `.env` for local runs is never committed.
 
 ```
 ENV=homelab                       # homelab | azure
@@ -402,14 +397,14 @@ AZURE_SUBSCRIPTION_ID=...
 AZURE_RESOURCE_GROUP=...
 ```
 
-**LiteLLM model aliases** (`deploy/k8s/llm/litellm-config.yaml` on the homelab, the same file mounted into the LiteLLM Container App on Azure). The app only knows the aliases:
+**LiteLLM model aliases** (a ConfigMap in the homelab repo's `argocd/apps/directive-copilot/`; on Azure, `deploy/azure/litellm-config.yaml` mounted into the LiteLLM Container App). The app only knows the aliases:
 
 | Alias | Homelab target | Azure target |
 |---|---|---|
 | `chat` | `openrouter/openai/gpt-6-luna`, provider pinned to OpenAI, low reasoning effort | GPT-6 Luna deployment in Microsoft Foundry |
 | `judge` | `openrouter/anthropic/claude-haiku-5.5`, provider pinned to Anthropic, low effort | Claude Haiku 5.5 deployment in Microsoft Foundry (hosted on Azure) |
 | `chat-dev` | `openrouter/openrouter/free` (OpenRouter's free-model router) | not defined |
-| `embed` | `ollama/nomic-embed-text` | Azure embedding deployment |
+| `embed` | `ollama/nomic-embed-text:v1.5` | Azure embedding deployment |
 
 - **Pin providers** in the OpenRouter aliases (provider routing, fallbacks off) so an eval run can't silently move between hosts. Turn on zero data retention in the OpenRouter account.
 - Check during milestone 0 that LiteLLM's model IDs match OpenRouter's current catalogue, and during milestone 8 that LiteLLM can reach Claude on Foundry; if not, point `judge` at the Anthropic API directly for the Azure stage.
@@ -419,8 +414,8 @@ AZURE_RESOURCE_GROUP=...
 
 **Stage 1: homelab**
 
-0. **Cluster prep (1h):** k3s on the mini PC; namespace; Postgres + pgvector on local-path storage + nightly `pg_dump` CronJob; Ollama with `nomic-embed-text` only (`OLLAMA_NUM_PARALLEL=1`, CPU limit); OpenRouter account with zero data retention and ~$15 of credits; LiteLLM with `chat`/`judge`/`chat-dev`/`embed` aliases; check every alias with `curl`.
-1. **Skeleton (1.5h):** FastAPI hello + health checks, alembic migrations, Vite React app, multi-stage Dockerfile, Kustomize base + homelab overlay, migrate Job, app reachable through the Ingress.
+0. **Cluster prep (half a day):** in the homelab repo: shut down the `dev` cluster, grow the `prod` workers to 7 GB and the nodes to 4 vCPU; add the `directive-copilot` app: namespace, Postgres + pgvector on `nfs-prod` + nightly `pg_dump` CronJob, Ollama with `nomic-embed-text` only (`OLLAMA_NUM_PARALLEL=1`, CPU limit), LiteLLM with `chat`/`judge`/`chat-dev`/`embed` aliases, secrets in Vault. OpenRouter account with zero data retention and ~$15 of credits. Check every alias with `curl`.
+1. **Skeleton (1.5h):** FastAPI hello + health checks, alembic migrations, Vite React app, multi-stage Dockerfile, image published to GHCR, app and migrations added to the homelab app, app reachable through the Ingress.
 2. **Ingest (1.5h):** parse 2 directives (current editions), chunk, record edition date, embed, run as a Job, verify with a raw similarity query.
 3. **Graph happy path (2h):** retrieve → answer → respond with citations on `/`, built against `chat-dev`; structured output + Pydantic validation + one retry; then switch to `chat` and check cost per answer.
 4. **Grading + HITL (2h):** deterministic citation checks, `Judge` interface + `LLMJudge`, interrupt, review queue page, resume.
@@ -436,7 +431,7 @@ AZURE_RESOURCE_GROUP=...
 ## Definition of done
 
 **Homelab**
-- [ ] `make deploy-homelab` takes an empty namespace to a working app (DB, embeddings, LiteLLM aliases, migrations, ingest).
+- [ ] An ArgoCD sync into an empty namespace, then the ingest Job, gives a working app (DB, embeddings, LiteLLM aliases, migrations).
 - [ ] Evals refuse to run on `chat-dev` or any free model.
 - [ ] Every answer shows clickable citations with the quoted text and the directive edition.
 - [ ] At least one sample question reliably goes to review.
@@ -464,8 +459,7 @@ AZURE_RESOURCE_GROUP=...
 - Detect when aer.ca publishes a new edition of an ingested directive, re-ingest it, and re-run evals to show what changed.
 - Feed reviewer edits back in as few-shot examples, or into the eval set.
 - Use judge probabilities to tune `CONFIDENCE_THRESHOLD`: plot escalation rate vs. error rate on the eval set.
-- GitOps the homelab with Argo CD or Flux; GitHub Actions to build, run tests, push to ACR, post `terraform plan` on PRs and `apply` on merge.
-- Manage the homelab with Terraform too (`kubernetes` / `helm` providers), so both environments use one tool.
+- GitHub Actions to build, run tests, push to ACR, post `terraform plan` on PRs and `apply` on merge.
 - Use managed identity on Azure instead of keys for Postgres and Azure OpenAI.
 - Swap the hand-rolled search for Azure AI Search to show the enterprise path.
 - Trace every run with LangSmith, Langfuse or OpenTelemetry and link to it from the run detail.

@@ -166,16 +166,14 @@ jobs:
       - name: Check web
         run: make check-web
 
-  # Validates manifests and Terraform without touching any cluster or cloud:
-  # no credentials are available to this job.
+  # Validates Terraform without touching any cloud: no credentials are
+  # available to this job.
   infra:
     runs-on: ubuntu-latest
     needs: changes
     if: needs.changes.outputs.infra == 'true'
     steps:
       - uses: actions/checkout@v7
-
-      - uses: azure/setup-kubectl@v5
 
       - uses: hashicorp/setup-terraform@v4
 

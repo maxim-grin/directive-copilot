@@ -1,8 +1,8 @@
 # One place for every check command. Claude Code hooks, pre-commit and CI
 # all call these targets, so a command changes here and nowhere else.
 #
-# Targets that need a tool the machine may not have (node, terraform,
-# kubectl) say so and exit non-zero rather than silently passing.
+# Targets that need a tool the machine may not have (node, terraform)
+# say so and exit non-zero rather than silently passing.
 
 SHELL := bash
 .SHELLFLAGS := -euo pipefail -c
@@ -10,7 +10,6 @@ SHELL := bash
 
 WEB := web
 TF_DIRS := deploy/azure deploy/azure/bootstrap
-K8S_OVERLAY := deploy/k8s/overlays/homelab
 
 .PHONY: help
 help: ## List targets
@@ -65,10 +64,8 @@ api-types: require-node ## Regenerate the TS client from FastAPI's OpenAPI schem
 # --- Infra --------------------------------------------------------------------
 
 .PHONY: check-infra
-check-infra: ## Render Kustomize, terraform fmt + validate (no cluster or cloud access)
-	@command -v kubectl >/dev/null || { echo "kubectl not installed" >&2; exit 1; }
+check-infra: ## Terraform fmt + validate (no cloud access)
 	@command -v terraform >/dev/null || { echo "terraform not installed" >&2; exit 1; }
-	kubectl kustomize $(K8S_OVERLAY) > /dev/null
 	terraform fmt -check -recursive deploy/azure
 	for dir in $(TF_DIRS); do \
 	  terraform -chdir="$$dir" init -backend=false -input=false > /dev/null; \
