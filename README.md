@@ -67,9 +67,10 @@ building to use a free model; evals need the paid `chat` and `judge`.
 uv sync --group dev && uv run pre-commit install
 npm --prefix web ci
 
-# The port-forwards need the `prod` kube context.
-kubectl --context prod -n directive-copilot port-forward svc/postgres 5432 &
-kubectl --context prod -n directive-copilot port-forward svc/litellm 4000 &
+# Current kube context must be the `prod` cluster: name that context
+# `homelab`, or set DC_KUBE_CONTEXT to its name.
+kubectl -n directive-copilot port-forward svc/postgres 5432 &
+kubectl -n directive-copilot port-forward svc/litellm 4000 &
 
 uv run fastapi dev copilot/api.py   # API on :8000
 npm --prefix web run dev            # UI; Vite proxies /api to the API
