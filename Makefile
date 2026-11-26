@@ -35,7 +35,8 @@ test: ## Unit tests: fake LLM + judge, no DB, no network (pytest's default marke
 
 .PHONY: test-integration
 test-integration: ## Integration tests; needs DATABASE_URL pointing at Postgres + pgvector
-	uv run alembic upgrade head
+	@# Without migrations there is no alembic to spawn, and CI failed on it.
+	if [ -f alembic.ini ]; then uv run alembic upgrade head; fi
 	@# Exit 5 means no integration tests were collected yet; that's not a failure.
 	uv run pytest -q -m integration || [ $$? -eq 5 ]
 
