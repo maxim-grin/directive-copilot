@@ -66,18 +66,20 @@ Keep every `argocd/apps/*/dev/` directory, `argocd/apps/clusters/dev/` and the V
 - [x] **Step 6:** `grep -rn 'env: dev' argocd/apps/*/config.yaml` prints nothing; `scripts/check-manifests.sh` ends `check-manifests: ok`.
 - [x] **Step 7:** ADR 0034: `dev` paused, memory and sizes as above, no staging (suspends the dev-first step of 0028), disks grown because the new app's images do not fit 20 GB, rejected options from the spec. Add its index row.
 - [x] **Step 8:** Runbook entry "Pause and resume dev" holding Task 3's commands (with `$PROD_KC`) and the reverse order for resuming (shrink `prod`, start the VMs, revert, `dev_register` playbook). Mark `dev` as paused wherever the listed docs describe it as running, including "promote jobboard" (new tags now go straight to `prod`).
-- [ ] **Step 9:** `scripts/check-runbooks.sh` and `pre-commit run --all-files` pass. Commit `ops: pause dev and grow prod`, push, open a ready PR whose description links the runbook entry.
+- [x] **Step 9:** `scripts/check-runbooks.sh` and `pre-commit run --all-files` pass. Commit `ops: pause dev and grow prod`, push, open a ready PR whose description links the runbook entry.
 
 ### Task 3: Owner, roll out capacity
 
-- [ ] **Step 1:** On `pve`, `lvs` shows the thin pool has well over 60 GB free (three disks grow by 20 GB). In `prod.tfvars`, set both workers to 7168 and remove or update any `node_cores` / `node_disk_size` override.
-- [ ] **Step 2:** Dump jobboard's database (runbook, `backups-and-recovery.md`).
-- [ ] **Step 3:** Merge the Task 2 PR. Expected: `clusters-dev` is gone; `dev-*` apps show `Unknown`.
-- [ ] **Step 4:** Only once `clusters-dev` is gone and all eight apps read `Unknown` (otherwise stop: a delete could cascade into `dev`), for each of `dev-cert-manager`, `dev-cert-manager-issuers`, `dev-ingress-nginx`, `dev-jobboard`, `dev-kube-prometheus-stack`, `dev-monitoring-secrets`, `dev-nfs-provisioner`, `dev-shortener`, back to back: patch `metadata.finalizers` to `null`, then delete the Application. Never delete with the finalizer in place.
-- [ ] **Step 5:** `terraform apply` in `environments/dev`: plan must read 0 add, 2 change, 0 destroy. Then `qm shutdown 4101` and `qm shutdown 4201`.
-- [ ] **Step 6:** `terraform apply` in `environments/prod`: 0 add, 3 change, **0 destroy**. Any destroy is a stop.
-- [ ] **Step 7:** One node at a time, workers first, then the control plane: `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data` (workers only), `qm shutdown <vmid>`, `qm start <vmid>` (a guest reboot does not apply pending changes), wait for `Ready`, `kubectl uncordon <node>`. Order: 3201, 3202, 3101.
-- [ ] **Step 8: Verify.** `kubectl get nodes -o custom-columns=NAME:.metadata.name,CPU:.status.capacity.cpu,MEM:.status.capacity.memory,DISK:.status.capacity.ephemeral-storage` shows 4 CPU on all three, about 7 GiB on workers, and disk near 40 GB (if still near 20 GB, stop: Talos did not grow the partition). All `prod-*` apps `Synced`/`Healthy`; `https://jobs.mgryn.cc/` answers; `qm list` shows 4101 and 4201 stopped.
+Runs after Task 8. The homelab runbook entry for removing `dev` holds the commands and stop gates and wins over this summary.
+
+- [ ] **Step 1:** On `pve`, `lvs` shows the thin pool has well over 60 GB free after the `dev` disks go (three `prod` disks grow by 20 GB). In `prod.tfvars`, set both workers to 7168 and remove or update any `node_cores` / `node_disk_size` override.
+- [ ] **Step 2:** Dump jobboard's database.
+- [ ] **Step 3:** Merge the capacity PR. Expected: `clusters-dev` is gone; `dev-*` apps show `Unknown`.
+- [ ] **Step 4:** Only then, delete the eight `dev-*` Applications, finalizers removed first.
+- [ ] **Step 5:** `terraform apply` in `environments/dev`: 0 add, 0 change, **2 destroy** (4101 and 4201 only; nothing named `claude_code`). Anything else is a stop. Never `terraform destroy` this root.
+- [ ] **Step 6:** `terraform apply` in `environments/prod`: 0 add, 3 change, 0 destroy.
+- [ ] **Step 7:** Restart the `prod` nodes one at a time, workers first.
+- [ ] **Step 8: Verify.** 4 CPU on all three nodes, about 7 GiB on workers, disk near 40 GB; all `prod-*` apps `Synced`/`Healthy`; `jobs.mgryn.cc` answers; `qm list` has no 4101 or 4201.
 
 ### Task 4: HL, namespace, Postgres and backup (branch `feat/directive-copilot-app`)
 
@@ -161,3 +163,16 @@ OpenRouter entries use `api_key: os.environ/OPENROUTER_API_KEY`; `general_settin
 - [ ] **Step 5:** `kubectl -n directive-copilot create job backup-check --from=cronjob/postgres-backup` completes and its log names a `.dump` (the script has already run `pg_restore --list` on it).
 - [ ] **Step 6:** Port-forward `svc/litellm 4000`. `chat`, `judge`, `chat-dev` answer `/v1/chat/completions`; `embed` returns 768 numbers from `/v1/embeddings`. OpenRouter's activity page shows OpenAI and Anthropic as providers. If `chat-dev` fails on data policy, record the error and decide; do not silently turn retention off.
 - [ ] **Step 7:** Comment on the app PR with each worker's memory use (Grafana) and `kubectl -n directive-copilot get pods` output: the baseline for later milestones.
+
+### Task 8: HL, remove the `dev` cluster instead of pausing it (branch `feat/pause-dev-grow-prod`)
+
+Changes Task 2's result: the owner chose to destroy the two kubeadm VMs. Runs before Task 3.
+
+**Files:** `terraform/environments/dev/{main.tf,outputs.tf,dev.tftest.hcl}`, ADR 0034 and its index row (unmerged, may be renamed), ADR 0028 Status line, the "Pause and resume dev" runbook entry, and every doc note Task 2 added.
+
+- [ ] **Step 1: Failing test.** `dev.tftest.hcl` asserts the root plans `claude-code` (name and vmid 102) and no longer expects kubeadm nodes. Run `terraform test`: FAIL while the outputs and module remain as they are.
+- [ ] **Step 2:** Remove `module "kubeadm-dev"` and the outputs that only describe it. `module "claude_code"` is unchanged. Keep variables, `ansible/` dev files and `argocd/apps/*/dev/` so a rebuild is a restore from git; satisfy tflint without deleting what a rebuild needs. No `removed` or `moved` block: the destroy is intended.
+- [ ] **Step 3:** `terraform test`, `terraform fmt -check`, `tflint`, `scripts/check-manifests.sh`, `scripts/check-runbooks.sh` pass.
+- [ ] **Step 4:** ADR 0034 states: `dev` destroyed, how to rebuild, old `nfs-dev` directories remain on `nfs-01`, no staging.
+- [ ] **Step 5:** Runbook: remove-`dev` entry (merge, confirm apps `Unknown`, delete apps, apply `dev` with exactly 2 destroy, grow `prod`) with the existing stop gates, never `terraform destroy` in this root; and a rebuild order (shrink `prod`, restore module, outputs, test, app entries and `clusters-dev.yaml`, apply, Ansible, register). Remove pause-only steps (`start_at_node_boot`, shutting down and starting VMs) and `-target` warnings in docs that no longer apply.
+- [ ] **Step 6:** Commit `ops: remove dev cluster from terraform`.

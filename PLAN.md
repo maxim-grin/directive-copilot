@@ -43,7 +43,7 @@ The same container image runs in both. Everything that differs is an environment
 
 **Homelab hardware:** one mini PC, Intel i5-10500T (6 cores, 35 W TDP), 32 GB DDR4, 1 TB SSD, **no GPU**. That decides what runs locally: Postgres, embeddings and the CPU decision model do; chat models don't.
 
-It runs Proxmox and is shared with other workloads. The app goes on the Talos `prod` cluster (one 4 GB control plane, two 7 GB workers, 4 vCPU each), delivered by ArgoCD from the [homelab](https://github.com/maxim-grin/homelab) repo ([ADR 0006](docs/decisions/0006-argocd-manifests-in-homelab-terraform-on-azure.md)).
+It runs Proxmox and is shared with other workloads. The app goes on the Talos `prod` cluster (one 4 GB control plane, two 7 GB workers, 4 vCPU each), delivered by ArgoCD from the [homelab](https://github.com/maxim-grin/homelab) repo ([ADR 0007](docs/decisions/0007-dev-cluster-destroyed-manifests-unchanged.md)).
 
 | Concern | homelab (stage 1) | azure (final stage) |
 |---|---|---|
@@ -414,7 +414,7 @@ AZURE_RESOURCE_GROUP=...
 
 **Stage 1: homelab**
 
-0. **Cluster prep (half a day):** in the homelab repo: shut down the `dev` cluster, grow the `prod` workers to 7 GB and the nodes to 4 vCPU; add the `directive-copilot` app: namespace, Postgres + pgvector on `nfs-prod` + nightly `pg_dump` CronJob, Ollama with `nomic-embed-text` only (`OLLAMA_NUM_PARALLEL=1`, CPU limit), LiteLLM with `chat`/`judge`/`chat-dev`/`embed` aliases, secrets in Vault. OpenRouter account with zero data retention and ~$15 of credits. Check every alias with `curl`.
+0. **Cluster prep (half a day):** in the homelab repo: destroy the `dev` Kubernetes cluster, grow the `prod` workers to 7 GB and the nodes to 4 vCPU; add the `directive-copilot` app: namespace, Postgres + pgvector on `nfs-prod` + nightly `pg_dump` CronJob, Ollama with `nomic-embed-text` only (`OLLAMA_NUM_PARALLEL=1`, CPU limit), LiteLLM with `chat`/`judge`/`chat-dev`/`embed` aliases, secrets in Vault. OpenRouter account with zero data retention and ~$15 of credits. Check every alias with `curl`.
 1. **Skeleton (1.5h):** FastAPI hello + health checks, alembic migrations, Vite React app, multi-stage Dockerfile, image published to GHCR, app and migrations added to the homelab app, app reachable through the Ingress.
 2. **Ingest (1.5h):** parse 2 directives (current editions), chunk, record edition date, embed, run as a Job, verify with a raw similarity query.
 3. **Graph happy path (2h):** retrieve → answer → respond with citations on `/`, built against `chat-dev`; structured output + Pydantic validation + one retry; then switch to `chat` and check cost per answer.

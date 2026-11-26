@@ -1,6 +1,6 @@
 # 0006: ArgoCD manifests in the homelab repo, Terraform on Azure
 
-Status: Accepted
+Status: Superseded by [0007](0007-dev-cluster-destroyed-manifests-unchanged.md)
 Date: 2026-11-26
 
 Supersedes [0003](0003-kustomize-on-the-homelab-terraform-on-azure.md).

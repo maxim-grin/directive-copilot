@@ -32,4 +32,5 @@ record accepts an edit to its Status line and nothing else.
 | [0003](0003-kustomize-on-the-homelab-terraform-on-azure.md) | Kustomize on the homelab, Terraform on Azure | Superseded by 0006 |
 | [0004](0004-tools-enforce-rules-the-makefile-owns-commands.md) | Tools enforce rules; the Makefile owns the commands | Accepted |
 | [0005](0005-hosted-llms-same-models-in-both-environments.md) | Hosted LLMs, the same models in both environments | Accepted |
-| [0006](0006-argocd-manifests-in-homelab-terraform-on-azure.md) | ArgoCD manifests in the homelab repo, Terraform on Azure | Accepted |
+| [0006](0006-argocd-manifests-in-homelab-terraform-on-azure.md) | ArgoCD manifests in the homelab repo, Terraform on Azure | Superseded by 0007 |
+| [0007](0007-dev-cluster-destroyed-manifests-unchanged.md) | ArgoCD manifests in homelab, Terraform on Azure, no dev cluster | Accepted |
