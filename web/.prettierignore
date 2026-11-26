@@ -1,0 +1,4 @@
+# Generated from the FastAPI OpenAPI schema; CI checks they match a fresh regeneration.
+openapi.json
+src/api/schema.d.ts
+dist/

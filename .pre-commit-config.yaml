@@ -1,0 +1,100 @@
+# Without this, a plain `pre-commit install` wires up only the pre-commit
+# stage: commit-msg and pre-push hooks are silently never installed, and a
+# malformed commit or a broken push lands unchecked.
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.6
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # Generated files are excluded from the formatters: the generator owns
+      # them, and CI checks they match a fresh regeneration byte for byte.
+      - id: trailing-whitespace
+        exclude: ^web/openapi\.json$|^web/src/api/schema\.d\.ts$
+      - id: end-of-file-fixer
+        exclude: ^web/openapi\.json$|^web/src/api/schema\.d\.ts$
+      - id: mixed-line-ending
+      # Kubernetes manifests put several documents in one file.
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      # The AER source PDFs are the only large files that belong in git.
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+        exclude: ^data/raw/
+      - id: detect-private-key
+      # main receives finished work only, through a reviewed PR. Blocks
+      # people and agents alike.
+      - id: no-commit-to-branch
+        args: [--branch, main]
+
+  # Secret scanning: API keys, connection strings, Terraform outputs pasted
+  # into config. Runs on staged changes only.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      # Build-process vocabulary means nothing to a reader without the plan
+      # open, and goes stale when a task is renumbered: state the rule
+      # inline instead.
+      - id: no-plan-references
+        name: no plan/task references in code
+        language: pygrep
+        entry: '(?i)\b(task \d+|verified reference \d+|docs/superpowers/|as claude\.md says)'
+        types_or: [python, ts, tsx, javascript, shell, terraform]
+
+      - id: check-commit-msg
+        name: check commit message
+        language: system
+        entry: uv run python tools/check_commit_msg.py
+        stages: [commit-msg]
+
+      # Local hook, not mirrors-mypy: running through the project venv means
+      # mypy's dependency versions come from uv.lock and cannot drift.
+      - id: mypy
+        name: mypy
+        language: system
+        entry: uv run mypy
+        pass_filenames: false
+        types: [python]
+
+      # Uses web/'s own prettier version and config. Generated API types are
+      # left alone (see above).
+      - id: prettier
+        name: prettier
+        language: system
+        entry: >-
+          bash -c '[ -x web/node_modules/.bin/prettier ]
+          || { echo "prettier not installed: run npm --prefix web ci"; exit 1; };
+          web/node_modules/.bin/prettier --write --ignore-unknown "$@"' --
+        files: ^web/
+        exclude: ^web/openapi\.json$|^web/src/api/schema\.d\.ts$
+
+      - id: terraform-fmt
+        name: terraform fmt
+        language: system
+        entry: terraform fmt
+        files: ^deploy/azure/.*\.tf$
+
+      # pre-push, not pre-commit: too slow for every commit. `make test` is
+      # the unit suite only (pytest's default markers); integration tests
+      # need Postgres and run in CI, evals cost money and run on demand.
+      - id: pytest
+        name: pytest
+        language: system
+        entry: make test
+        pass_filenames: false
+        exclude: ^docs/|\.md$
+        stages: [pre-push]
