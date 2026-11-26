@@ -22,6 +22,10 @@ vCPU per `prod` node goes from 2 to 4 (`node_cores` covers all three nodes).
 The host has 6 cores, 12 threads; embeddings and later the decision judge
 are CPU-bound.
 
+Node disks go from 20 GB to 40 GB (all three nodes, same restart): the
+compressed images alone are 3.4 GB (Ollama), 0.7 GB (LiteLLM) and 0.16 GB
+(pgvector), and 10 GB disks already caused evictions on `dev`.
+
 ## Intent
 
 Everything the app needs from the homelab exists and is proven before any
@@ -97,9 +101,10 @@ answering on all four aliases.
 
 1. Remove the `env: dev` entries and stop anything that would re-register the
    cluster.
-2. Delete the `dev-*` Applications **without cascade**, then the `dev`
-   cluster registration. The ApplicationSet never deletes them itself, and a
-   cascade would remove the workloads and their `nfs-dev` data.
+2. The same merge removes the `dev` cluster registration. Then delete the
+   `dev-*` Applications **without cascade**: the ApplicationSet never deletes
+   them itself, and a cascade would remove the workloads and their `nfs-dev`
+   data.
 3. Shut the two VMs down. Keep disks.
 4. Only then raise `prod` memory, so the host is never over-committed.
 
