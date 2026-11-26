@@ -1,6 +1,6 @@
 # 0003: Kustomize on the homelab, Terraform on Azure
 
-Status: Accepted
+Status: Superseded by [0006](0006-argocd-manifests-in-homelab-terraform-on-azure.md)
 Date: 2026-11-25
 
 ## Context
