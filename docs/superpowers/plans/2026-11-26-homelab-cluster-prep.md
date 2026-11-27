@@ -76,11 +76,11 @@ Runs after Task 8. The homelab runbook entry for removing `dev` holds the comman
 
 - [ ] **Step 1:** On `pve`, `lvs` shows the thin pool has well over 60 GB free after the `dev` disks go (three `prod` disks grow by 20 GB). In `prod.tfvars`, set both workers to 7168 and remove or update any `node_cores` / `node_disk_size` override.
 - [ ] **Step 2:** Dump jobboard's database.
-- [ ] **Step 3:** Merge the capacity PR. Expected: `clusters-dev` is gone; `dev-*` apps show `Unknown`.
-- [ ] **Step 4:** Only then, delete the eight `dev-*` Applications, finalizers removed first.
+- [x] **Step 3:** Merge the capacity PR. Expected: `clusters-dev` is gone; `dev-*` apps show `Unknown`.
+- [x] **Step 4:** Only then, delete the eight `dev-*` Applications, finalizers removed first.
 - [ ] **Step 5:** `terraform apply` in `environments/dev`: 0 add, 0 change, **2 destroy** (4101 and 4201 only; nothing named `claude_code`). Anything else is a stop. Never `terraform destroy` this root.
-- [ ] **Step 6:** `terraform apply` in `environments/prod`: 0 add, 3 change, 0 destroy.
-- [ ] **Step 7:** Restart the `prod` nodes one at a time, workers first.
+- [x] **Step 6:** `terraform apply` in `environments/prod`: 0 add, 3 change, 0 destroy.
+- [x] **Step 7:** Restart the `prod` nodes one at a time, workers first.
 - [ ] **Step 8: Verify.** 4 CPU on all three nodes, about 7 GiB on workers, disk near 40 GB; all `prod-*` apps `Synced`/`Healthy`; `jobs.mgryn.cc` answers; `qm list` has no 4101 or 4201.
 
 ### Task 4: HL, namespace, Postgres and backup (branch `feat/directive-copilot-app`)
@@ -152,9 +152,9 @@ OpenRouter entries use `api_key: os.environ/OPENROUTER_API_KEY`; `general_settin
   - A request without the master key gets 401.
 
   If effort is dropped or rejected, move it to `extra_body.reasoning: {effort: low}` and rerun. `embed` needs the real Ollama: run it alongside if disk allows, expect length 768; otherwise Task 7 covers it.
-- [x] **Step 3:** Manifests: Deployment `litellm`, uid 65532 (the image's user), args `--config /app/config/config.yaml --port 4000`, config from a `configMapGenerator` (key `config.yaml`), probes `/health/liveliness` and `/health/readiness`, requests `100m`/`512Mi`, memory limit `1536Mi`, both keys from the Secret. Add both placeholders to `prod/secret.yaml` and both paths (`directive-copilot/db`, `directive-copilot/llm`) under `kv-prod` in `secret.yaml.example`. Confirm the container starts as that uid in Docker.
+- [x] **Step 3:** Manifests: Deployment `litellm`, uid 65532 (the image's user), args `--config /app/config/config.yaml --port 4000`, config from a `configMapGenerator` (key `config.yaml`), probes `/health/liveliness` and `/health/readiness`, requests `100m`/`1Gi`, memory limit `1536Mi`, both keys from the Secret. Add both placeholders to `prod/secret.yaml` and both paths (`directive-copilot/db`, `directive-copilot/llm`) under `kv-prod` in `secret.yaml.example`. Confirm the container starts as that uid in Docker.
 - [x] **Step 4:** ADR 0035: app on `prod`, Postgres and dumps on two `nfs-prod` volumes, same-SSD limit, no operator. Runbooks: "Check directive-copilot" in `checks.md` (Task 7 steps 4 to 6 as commands, keys read without echo) and "Dump directive-copilot's database" in `backups-and-recovery.md` (manual Job from the CronJob; retained-volume note). Add the app to both READMEs.
-- [ ] **Step 5:** `scripts/check-manifests.sh`, `scripts/check-runbooks.sh`, `pre-commit run --all-files` pass. Commit `feat: add litellm gateway`, push, open a ready PR with the owner steps linked. Remove the test images.
+- [x] **Step 5:** `scripts/check-manifests.sh`, `scripts/check-runbooks.sh`, `pre-commit run --all-files` pass. Commit `feat: add litellm gateway`, push, open a ready PR with the owner steps linked. Remove the test images.
 
 ### Task 7: Owner, secrets, deploy and prove
 
