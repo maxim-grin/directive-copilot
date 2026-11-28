@@ -163,7 +163,7 @@ OpenRouter entries use `api_key: os.environ/OPENROUTER_API_KEY`; `general_settin
 - [x] **Step 3:** Merge the app PR. `prod-directive-copilot` is `Synced`/`Healthy`; all pods `Ready`; no node reports `DiskPressure`.
 - [x] **Step 4:** `kubectl -n directive-copilot exec postgres-0 -- psql -U copilot -d copilot -tAc "select default_version from pg_available_extensions where name='vector'"` prints `0.8.7`.
 - [x] **Step 5:** `kubectl -n directive-copilot create job backup-check --from=cronjob/postgres-backup` completes and its log names a `.dump` (the script has already run `pg_restore --list` on it).
-- [ ] **Step 6:** Port-forward `svc/litellm 4000`. `chat`, `judge`, `chat-dev` answer `/v1/chat/completions`; `embed` returns 768 numbers from `/v1/embeddings`. OpenRouter's activity page shows OpenAI and Anthropic as providers. If `chat-dev` fails on data policy, record the error and check the account's training setting for free models.
+- [x] **Step 6:** Port-forward `svc/litellm 4000`. `chat`, `judge`, `chat-dev` answer `/v1/chat/completions`; `embed` returns 768 numbers from `/v1/embeddings`. OpenRouter's activity page shows OpenAI and Anthropic as providers. If `chat-dev` fails on data policy, record the error and check the account's training setting for free models.
 - [ ] **Step 7:** Comment on the app PR with each worker's memory use (Grafana) and `kubectl -n directive-copilot get pods` output: the baseline for later milestones.
 
 ### Task 8: HL, remove the `dev` cluster instead of pausing it (branch `feat/pause-dev-grow-prod`)
