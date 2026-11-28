@@ -78,10 +78,10 @@ Runs after Task 8. The homelab runbook entry for removing `dev` holds the comman
 - [ ] **Step 2:** Dump jobboard's database.
 - [x] **Step 3:** Merge the capacity PR. Expected: `clusters-dev` is gone; `dev-*` apps show `Unknown`.
 - [x] **Step 4:** Only then, delete the eight `dev-*` Applications, finalizers removed first.
-- [ ] **Step 5:** `terraform apply` in `environments/dev`: 0 add, 0 change, **2 destroy** (4101 and 4201 only; nothing named `claude_code`). Anything else is a stop. Never `terraform destroy` this root.
+- [x] **Step 5:** `terraform apply` in `environments/dev`: 0 add, 0 change, **2 destroy** (4101 and 4201 only; nothing named `claude_code`). Anything else is a stop. Never `terraform destroy` this root.
 - [x] **Step 6:** `terraform apply` in `environments/prod`: 0 add, 3 change, 0 destroy.
 - [x] **Step 7:** Restart the `prod` nodes one at a time, workers first.
-- [ ] **Step 8: Verify.** 4 CPU on all three nodes, about 7 GiB on workers, disk near 40 GB; all `prod-*` apps `Synced`/`Healthy`; `jobs.mgryn.cc` answers; `qm list` has no 4101 or 4201.
+- [x] **Step 8: Verify.** 4 CPU on all three nodes, about 7 GiB on workers, disk near 40 GB; all `prod-*` apps `Synced`/`Healthy`; `jobs.mgryn.cc` answers; `qm list` has no 4101 or 4201.
 
 ### Task 4: HL, namespace, Postgres and backup (branch `feat/directive-copilot-app`)
 
@@ -159,7 +159,7 @@ OpenRouter entries use `api_key: os.environ/OPENROUTER_API_KEY`; `general_settin
 ### Task 7: Owner, secrets, deploy and prove
 
 - [ ] **Step 1:** OpenRouter: account, zero data retention on, about $15 credit, auto top-up off, one API key.
-- [ ] **Step 2:** `ansible-vault edit secret.yaml`: add both `kv-prod` paths (password and master key from `openssl rand -hex 32`; master key prefixed `sk-`). Run the runbook's **Seed**; Vault stays unsealed. This must precede the merge.
+- [x] **Step 2:** `ansible-vault edit secret.yaml`: add both `kv-prod` paths (password and master key from `openssl rand -hex 32`; master key prefixed `sk-`). Run the runbook's **Seed**; Vault stays unsealed. This must precede the merge.
 - [ ] **Step 3:** Merge the app PR. `prod-directive-copilot` is `Synced`/`Healthy`; all pods `Ready`; no node reports `DiskPressure`.
 - [ ] **Step 4:** `kubectl -n directive-copilot exec postgres-0 -- psql -U copilot -d copilot -tAc "select default_version from pg_available_extensions where name='vector'"` prints `0.8.7`.
 - [ ] **Step 5:** `kubectl -n directive-copilot create job backup-check --from=cronjob/postgres-backup` completes and its log names a `.dump` (the script has already run `pg_restore --list` on it).
