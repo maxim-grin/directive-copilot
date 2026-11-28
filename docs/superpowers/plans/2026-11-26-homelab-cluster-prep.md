@@ -4,7 +4,7 @@
 
 **Goal:** Postgres + pgvector, local embeddings and a LiteLLM gateway running on the Talos `prod` cluster, every model alias proven with `curl`.
 
-**Architecture:** `dev` is paused and its memory moves to the `prod` workers. A new ArgoCD app, `directive-copilot`, in the homelab repo holds three workloads and a backup CronJob. Agents write and verify the PRs; the owner merges, applies and restarts.
+**Architecture:** the `dev` Kubernetes cluster is destroyed and its memory moves to the `prod` workers. A new ArgoCD app, `directive-copilot`, in the homelab repo holds three workloads and a backup CronJob. Agents write and verify the PRs; the owner merges, applies and restarts.
 
 **Tech Stack:** Terraform (`telmate/proxmox`), ArgoCD + Kustomize, argocd-vault-plugin, `pgvector/pgvector`, Ollama, LiteLLM proxy, OpenRouter.
 
@@ -33,7 +33,7 @@
 2. **LiteLLM silently drops provider pinning**, so evals later move between hosts. Expect the upstream request to carry it (Task 6).
 3. **A failed dump counts as a backup** or rotates good ones away. Expect a non-zero exit and nothing pruned (Task 4).
 4. **Pod restart with no internet.** Ollama must start from the model already on its volume (Task 5).
-5. **`chat-dev` fails under zero data retention**: free providers may be excluded. Expect a clear result and an owner decision, not a quietly relaxed setting (Task 7).
+5. **`chat-dev` fails on data policy**: free providers may be excluded by account settings, even with zero data retention off (ADR 0008). Expect a clear result and an owner decision (Task 7).
 
 ---
 
@@ -49,6 +49,8 @@
 
 ### Task 2: HL, pause `dev` and grow `prod` (branch `feat/pause-dev-grow-prod`)
 
+> **Historical.** Done as written, then changed by Task 8: `dev` is destroyed, not paused. Where they differ, Task 8 and the design win.
+
 **Files:**
 - Modify: `argocd/apps/{cert-manager,cert-manager-issuers,ingress-nginx,jobboard,kube-prometheus-stack,monitoring-secrets,nfs-provisioner,shortener}/config.yaml`
 - Delete: `argocd/environments/prod/applications/clusters-dev.yaml`
@@ -58,26 +60,28 @@
 
 Keep every `argocd/apps/*/dev/` directory, `argocd/apps/clusters/dev/` and the VM definitions: resuming `dev` must be a revert.
 
-- [ ] **Step 1: Failing tests.** In `dev.tftest.hcl` flip the boot assertion to `alltrue([... : !n.start_at_node_boot])`, message `dev is paused: neither node starts at node boot`. In `prod.tftest.hcl` add `run "node_defaults"` asserting `var.node_cores == 4 && var.node_disk_size == "40G"`.
-- [ ] **Step 2:** In each of the two environment directories run `terraform init -backend=false && terraform test`. Expected: the new assertions FAIL.
-- [ ] **Step 3:** Set `start_at_node_boot = false` on `module "kubeadm-dev"` only (`claude_code` stays `true`). Change the two `prod` defaults. In the example tfvars set both workers to `memory = 7168`, with a comment that `dev`'s 6 GB moved here.
-- [ ] **Step 4:** `terraform test` passes in both; `terraform fmt -check -recursive terraform` is clean.
-- [ ] **Step 5:** Remove only the `env: dev` entry (and comments about it) from the eight `config.yaml` files; delete `clusters-dev.yaml`.
-- [ ] **Step 6:** `grep -rn 'env: dev' argocd/apps/*/config.yaml` prints nothing; `scripts/check-manifests.sh` ends `check-manifests: ok`.
-- [ ] **Step 7:** ADR 0034: `dev` paused, memory and sizes as above, no staging (suspends the dev-first step of 0028), disks grown because the new app's images do not fit 20 GB, rejected options from the spec. Add its index row.
-- [ ] **Step 8:** Runbook entry "Pause and resume dev" holding Task 3's commands (with `$PROD_KC`) and the reverse order for resuming (shrink `prod`, start the VMs, revert, `dev_register` playbook). Mark `dev` as paused wherever the listed docs describe it as running, including "promote jobboard" (new tags now go straight to `prod`).
-- [ ] **Step 9:** `scripts/check-runbooks.sh` and `pre-commit run --all-files` pass. Commit `ops: pause dev and grow prod`, push, open a ready PR whose description links the runbook entry.
+- [x] **Step 1: Failing tests.** In `dev.tftest.hcl` flip the boot assertion to `alltrue([... : !n.start_at_node_boot])`, message `dev is paused: neither node starts at node boot`. In `prod.tftest.hcl` add `run "node_defaults"` asserting `var.node_cores == 4 && var.node_disk_size == "40G"`.
+- [x] **Step 2:** In each of the two environment directories run `terraform init -backend=false && terraform test`. Expected: the new assertions FAIL.
+- [x] **Step 3:** Set `start_at_node_boot = false` on `module "kubeadm-dev"` only (`claude_code` stays `true`). Change the two `prod` defaults. In the example tfvars set both workers to `memory = 7168`, with a comment that `dev`'s 6 GB moved here.
+- [x] **Step 4:** `terraform test` passes in both; `terraform fmt -check -recursive terraform` is clean.
+- [x] **Step 5:** Remove only the `env: dev` entry (and comments about it) from the eight `config.yaml` files; delete `clusters-dev.yaml`.
+- [x] **Step 6:** `grep -rn 'env: dev' argocd/apps/*/config.yaml` prints nothing; `scripts/check-manifests.sh` ends `check-manifests: ok`.
+- [x] **Step 7:** ADR 0034: `dev` paused, memory and sizes as above, no staging (suspends the dev-first step of 0028), disks grown because the new app's images do not fit 20 GB, rejected options from the spec. Add its index row.
+- [x] **Step 8:** Runbook entry "Pause and resume dev" holding Task 3's commands (with `$PROD_KC`) and the reverse order for resuming (shrink `prod`, start the VMs, revert, `dev_register` playbook). Mark `dev` as paused wherever the listed docs describe it as running, including "promote jobboard" (new tags now go straight to `prod`).
+- [x] **Step 9:** `scripts/check-runbooks.sh` and `pre-commit run --all-files` pass. Commit `ops: pause dev and grow prod`, push, open a ready PR whose description links the runbook entry.
 
 ### Task 3: Owner, roll out capacity
 
-- [ ] **Step 1:** On `pve`, `lvs` shows the thin pool has well over 60 GB free (three disks grow by 20 GB). In `prod.tfvars`, set both workers to 7168 and remove or update any `node_cores` / `node_disk_size` override.
-- [ ] **Step 2:** Dump jobboard's database (runbook, `backups-and-recovery.md`).
-- [ ] **Step 3:** Merge the Task 2 PR. Expected: `clusters-dev` is gone; `dev-*` apps show `Unknown`.
-- [ ] **Step 4:** Only once `clusters-dev` is gone and all eight apps read `Unknown` (otherwise stop: a delete could cascade into `dev`), for each of `dev-cert-manager`, `dev-cert-manager-issuers`, `dev-ingress-nginx`, `dev-jobboard`, `dev-kube-prometheus-stack`, `dev-monitoring-secrets`, `dev-nfs-provisioner`, `dev-shortener`, back to back: patch `metadata.finalizers` to `null`, then delete the Application. Never delete with the finalizer in place.
-- [ ] **Step 5:** `terraform apply` in `environments/dev`: plan must read 0 add, 2 change, 0 destroy. Then `qm shutdown 4101` and `qm shutdown 4201`.
-- [ ] **Step 6:** `terraform apply` in `environments/prod`: 0 add, 3 change, **0 destroy**. Any destroy is a stop.
-- [ ] **Step 7:** One node at a time, workers first, then the control plane: `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data` (workers only), `qm shutdown <vmid>`, `qm start <vmid>` (a guest reboot does not apply pending changes), wait for `Ready`, `kubectl uncordon <node>`. Order: 3201, 3202, 3101.
-- [ ] **Step 8: Verify.** `kubectl get nodes -o custom-columns=NAME:.metadata.name,CPU:.status.capacity.cpu,MEM:.status.capacity.memory,DISK:.status.capacity.ephemeral-storage` shows 4 CPU on all three, about 7 GiB on workers, and disk near 40 GB (if still near 20 GB, stop: Talos did not grow the partition). All `prod-*` apps `Synced`/`Healthy`; `https://jobs.mgryn.cc/` answers; `qm list` shows 4101 and 4201 stopped.
+Runs after Task 8. The homelab runbook entry for removing `dev` holds the commands and stop gates and wins over this summary.
+
+- [x] **Step 1:** On `pve`, `lvs` shows the thin pool has well over 60 GB free after the `dev` disks go (three `prod` disks grow by 20 GB). In `prod.tfvars`, set both workers to 7168 and remove or update any `node_cores` / `node_disk_size` override.
+- [x] **Step 2:** Dump jobboard's database. Skipped: the owner reports it was empty.
+- [x] **Step 3:** Merge the capacity PR. Expected: `clusters-dev` is gone; `dev-*` apps show `Unknown`.
+- [x] **Step 4:** Only then, delete the eight `dev-*` Applications, finalizers removed first.
+- [x] **Step 5:** `terraform apply` in `environments/dev`: 0 add, 0 change, **2 destroy** (4101 and 4201 only; nothing named `claude_code`). Anything else is a stop. Never `terraform destroy` this root.
+- [x] **Step 6:** `terraform apply` in `environments/prod`: 0 add, 3 change, 0 destroy.
+- [x] **Step 7:** Restart the `prod` nodes one at a time, workers first.
+- [x] **Step 8: Verify.** 4 CPU on all three nodes, about 7 GiB on workers, disk near 40 GB; all `prod-*` apps `Synced`/`Healthy`; `jobs.mgryn.cc` answers; `qm list` has no 4101 or 4201.
 
 ### Task 4: HL, namespace, Postgres and backup (branch `feat/directive-copilot-app`)
 
@@ -90,20 +94,20 @@ Keep every `argocd/apps/*/dev/` directory, `argocd/apps/clusters/dev/` and the V
 - Produces: Secret `directive-copilot-db` key `POSTGRES_PASSWORD`; database and user `copilot` on `postgres:5432`; `base/kustomization.yaml`, which Tasks 5 and 6 extend.
 - `backup.sh`: env `BACKUP_DIR` (default `/backup`) plus libpq `PG*`. Dumps with `pg_dump -Fc` to `<name>.partial`, checks it with `pg_restore --list`, renames to `copilot-YYYYMMDDTHHMMSSZ.dump`, then keeps the 14 newest `*.dump` by name. Any failure: exit non-zero, remove the partial, prune nothing.
 
-- [ ] **Step 1: Failing test** with stub `pg_dump` / `pg_restore` on `PATH`, in the style of `scripts/tests/verify-dev.test.sh`. Cases:
+- [x] **Step 1: Failing test** with stub `pg_dump` / `pg_restore` on `PATH`, in the style of `scripts/tests/verify-dev.test.sh`. Cases:
   - 15 old dumps + success: exit 0, exactly 14 `*.dump`, the new one present, the two oldest gone.
   - `pg_dump` exits 1: non-zero exit, all 15 old dumps still there, no new `*.dump`, no `*.partial`.
   - `pg_restore` exits 1: same assertions.
-- [ ] **Step 2:** Run it. Expected: FAIL, script missing.
-- [ ] **Step 3:** Write `backup.sh`; run the test to PASS; `shellcheck` both.
-- [ ] **Step 4:** Write the manifests, following `argocd/apps/jobboard` and `shortener`.
+- [x] **Step 2:** Run it. Expected: FAIL, script missing.
+- [x] **Step 3:** Write `backup.sh`; run the test to PASS; `shellcheck` both.
+- [x] **Step 4:** Write the manifests, following `argocd/apps/jobboard` and `shortener`.
   - `config.yaml`: one `prod` entry, `createNamespace`, `serverSideApply`, `serverSideDiff` all `true` (ADR 0030).
   - Namespace labelled `pod-security.kubernetes.io/enforce: restricted`.
   - StatefulSet `postgres`, 1 replica: uid, gid and `fsGroup` 999; `POSTGRES_USER`/`POSTGRES_DB` `copilot`; `PGDATA=/var/lib/postgresql/data/pgdata`; `POSTGRES_INITDB_ARGS="--locale=en_US.UTF-8 --encoding=UTF8"`; `pg_isready` probes; requests `100m`/`256Mi`, memory limit `1Gi`; claim template `data`, `10Gi`, with `apiVersion` and `kind` spelled out.
   - CronJob `postgres-backup`: Postgres image, `0 9 * * *`, `concurrencyPolicy: Forbid`, `restartPolicy: Never`, same uid, script from a `configMapGenerator`, PVC `postgres-backup` `5Gi`, `PGHOST=postgres`.
   - `prod/secret.yaml`: placeholder `<path:kv-prod/data/directive-copilot/db#POSTGRES_PASSWORD>`.
-- [ ] **Step 5: Real restore check** (one-off, not committed): start the pgvector image with `--user 999:999`, run `backup.sh` against it from the same image. Expected: one `.dump`, and `psql -tAc "select default_version from pg_available_extensions where name='vector'"` prints `0.8.7`.
-- [ ] **Step 6:** `scripts/check-manifests.sh` ok and lists `prod-directive-copilot`. Commit `feat: add directive-copilot database`.
+- [x] **Step 5: Real restore check** (one-off, not committed): start the pgvector image with `--user 999:999`, run `backup.sh` against it from the same image. Expected: one `.dump`, and `psql -tAc "select default_version from pg_available_extensions where name='vector'"` prints `0.8.7`.
+- [x] **Step 6:** `scripts/check-manifests.sh` ok and lists `prod-directive-copilot`. Commit `feat: add directive-copilot database`.
 
 ### Task 5: HL, Ollama for embeddings
 
@@ -114,11 +118,11 @@ Keep every `argocd/apps/*/dev/` directory, `argocd/apps/clusters/dev/` and the V
 - Produces: `http://ollama:11434` serving `nomic-embed-text:v1.5`.
 - `pull-model.sh`: env `MODEL`; starts `ollama serve` in the background, waits up to 60 s for it, exits 0 if `ollama show "$MODEL"` succeeds, otherwise `ollama pull "$MODEL"`; non-zero on timeout or pull failure.
 
-- [ ] **Step 1: Failing check** (one-off, Docker): run the script in the Ollama image as `--user 10001:10001`, `HOME=/models`, `OLLAMA_MODELS=/models`, on a volume made mode 0777 (as the NFS share is). Expected: FAIL, script missing.
-- [ ] **Step 2:** Write the script. First run exits 0 after pulling. Second run with `--network none` exits 0 without pulling.
-- [ ] **Step 3:** Start the server on the same volume and user; `POST /v1/embeddings` with `{"model":"nomic-embed-text:v1.5","input":"hello"}` returns `.data[0].embedding` of length 768.
-- [ ] **Step 4:** Manifests: Deployment `ollama`, 1 replica, `Recreate`; uid, gid, `fsGroup` 10001; init container `pull-model` and server share env and the PVC `ollama-models` (`2Gi`); `OLLAMA_NUM_PARALLEL=1`; HTTP readiness and liveness on `/`; server requests `100m`/`512Mi`, limits `cpu: 2`, `memory: 2Gi`; script from a `configMapGenerator`.
-- [ ] **Step 5:** `shellcheck` the script (add to the CI list); `scripts/check-manifests.sh` ok. Commit `feat: add ollama embeddings`. Remove the Ollama image.
+- [x] **Step 1: Failing check** (one-off, Docker): run the script in the Ollama image as `--user 10001:10001`, `HOME=/models`, `OLLAMA_MODELS=/models`, on a volume made mode 0777 (as the NFS share is). Expected: FAIL, script missing.
+- [x] **Step 2:** Write the script. First run exits 0 after pulling. Second run with `--network none` exits 0 without pulling.
+- [x] **Step 3:** Start the server on the same volume and user; `POST /v1/embeddings` with `{"model":"nomic-embed-text:v1.5","input":"hello"}` returns `.data[0].embedding` of length 768.
+- [x] **Step 4:** Manifests: Deployment `ollama`, 1 replica, `Recreate`; uid, gid, `fsGroup` 10001; init container `pull-model` and server share env and the PVC `ollama-models` (`2Gi`); `OLLAMA_NUM_PARALLEL=1`; HTTP readiness and liveness on `/`; server requests `100m`/`512Mi`, limits `cpu: 2`, `memory: 2Gi`; script from a `configMapGenerator`.
+- [x] **Step 5:** `shellcheck` the script (add to the CI list); `scripts/check-manifests.sh` ok. Commit `feat: add ollama embeddings`. Remove the Ollama image.
 
 ### Task 6: HL, LiteLLM, docs and PR
 
@@ -130,7 +134,7 @@ Keep every `argocd/apps/*/dev/` directory, `argocd/apps/clusters/dev/` and the V
 - Consumes: `ollama:11434`.
 - Produces: `http://litellm:4000`, aliases `chat`, `judge`, `chat-dev`, `embed`; Secret `directive-copilot-llm` keys `LITELLM_MASTER_KEY`, `OPENROUTER_API_KEY` (paths `directive-copilot/llm#<KEY>`).
 
-- [ ] **Step 1: Write `litellm-config.yaml`** (IDs checked against `openrouter.ai/api/v1/models` on 2026-11-26):
+- [x] **Step 1: Write `litellm-config.yaml`** (IDs checked against `openrouter.ai/api/v1/models` on 2026-11-26):
 
 | `model_name` | `litellm_params` |
 | --- | --- |
@@ -141,23 +145,36 @@ Keep every `argocd/apps/*/dev/` directory, `argocd/apps/clusters/dev/` and the V
 
 OpenRouter entries use `api_key: os.environ/OPENROUTER_API_KEY`; `general_settings.master_key: os.environ/LITELLM_MASTER_KEY`. No database.
 
-- [ ] **Step 2: Forwarding check** (one-off, Docker, no real key, script in the scratchpad). Run the pinned LiteLLM image with this config, dummy keys and `OPENROUTER_API_BASE` pointing at a local server that records request bodies and returns a minimal chat completion. Send one request each to `chat`, `judge`, `chat-dev`. Assert:
+- [x] **Step 2: Forwarding check** (one-off, Docker, no real key, script in the scratchpad). Run the pinned LiteLLM image with this config, dummy keys and `OPENROUTER_API_BASE` pointing at a local server that records request bodies and returns a minimal chat completion. Send one request each to `chat`, `judge`, `chat-dev`. Assert:
   - `chat`: `model == "openai/gpt-6-luna"`, `provider == {"only": ["openai"], "allow_fallbacks": false}`, effort `low` (`reasoning_effort` or `reasoning.effort`).
   - `judge`: same with `anthropic/claude-haiku-5.5` and `["anthropic"]`.
   - `chat-dev`: `model == "openrouter/free"`.
   - A request without the master key gets 401.
 
   If effort is dropped or rejected, move it to `extra_body.reasoning: {effort: low}` and rerun. `embed` needs the real Ollama: run it alongside if disk allows, expect length 768; otherwise Task 7 covers it.
-- [ ] **Step 3:** Manifests: Deployment `litellm`, uid 65532 (the image's user), args `--config /app/config/config.yaml --port 4000`, config from a `configMapGenerator` (key `config.yaml`), probes `/health/liveliness` and `/health/readiness`, requests `100m`/`512Mi`, memory limit `1536Mi`, both keys from the Secret. Add both placeholders to `prod/secret.yaml` and both paths (`directive-copilot/db`, `directive-copilot/llm`) under `kv-prod` in `secret.yaml.example`. Confirm the container starts as that uid in Docker.
-- [ ] **Step 4:** ADR 0035: app on `prod`, Postgres and dumps on two `nfs-prod` volumes, same-SSD limit, no operator. Runbooks: "Check directive-copilot" in `checks.md` (Task 7 steps 4 to 6 as commands, keys read without echo) and "Dump directive-copilot's database" in `backups-and-recovery.md` (manual Job from the CronJob; retained-volume note). Add the app to both READMEs.
-- [ ] **Step 5:** `scripts/check-manifests.sh`, `scripts/check-runbooks.sh`, `pre-commit run --all-files` pass. Commit `feat: add litellm gateway`, push, open a ready PR with the owner steps linked. Remove the test images.
+- [x] **Step 3:** Manifests: Deployment `litellm`, uid 65532 (the image's user), args `--config /app/config/config.yaml --port 4000`, config from a `configMapGenerator` (key `config.yaml`), probes `/health/liveliness` and `/health/readiness`, requests `100m`/`1Gi`, memory limit `1536Mi`, both keys from the Secret. Add both placeholders to `prod/secret.yaml` and both paths (`directive-copilot/db`, `directive-copilot/llm`) under `kv-prod` in `secret.yaml.example`. Confirm the container starts as that uid in Docker.
+- [x] **Step 4:** ADR 0035: app on `prod`, Postgres and dumps on two `nfs-prod` volumes, same-SSD limit, no operator. Runbooks: "Check directive-copilot" in `checks.md` (Task 7 steps 4 to 6 as commands, keys read without echo) and "Dump directive-copilot's database" in `backups-and-recovery.md` (manual Job from the CronJob; retained-volume note). Add the app to both READMEs.
+- [x] **Step 5:** `scripts/check-manifests.sh`, `scripts/check-runbooks.sh`, `pre-commit run --all-files` pass. Commit `feat: add litellm gateway`, push, open a ready PR with the owner steps linked. Remove the test images.
 
 ### Task 7: Owner, secrets, deploy and prove
 
-- [ ] **Step 1:** OpenRouter: account, zero data retention on, about $15 credit, auto top-up off, one API key.
-- [ ] **Step 2:** `ansible-vault edit secret.yaml`: add both `kv-prod` paths (password and master key from `openssl rand -hex 32`; master key prefixed `sk-`). Run the runbook's **Seed**; Vault stays unsealed. This must precede the merge.
-- [ ] **Step 3:** Merge the app PR. `prod-directive-copilot` is `Synced`/`Healthy`; all pods `Ready`; no node reports `DiskPressure`.
-- [ ] **Step 4:** `kubectl -n directive-copilot exec postgres-0 -- psql -U copilot -d copilot -tAc "select default_version from pg_available_extensions where name='vector'"` prints `0.8.7`.
-- [ ] **Step 5:** `kubectl -n directive-copilot create job backup-check --from=cronjob/postgres-backup` completes and its log names a `.dump` (the script has already run `pg_restore --list` on it).
-- [ ] **Step 6:** Port-forward `svc/litellm 4000`. `chat`, `judge`, `chat-dev` answer `/v1/chat/completions`; `embed` returns 768 numbers from `/v1/embeddings`. OpenRouter's activity page shows OpenAI and Anthropic as providers. If `chat-dev` fails on data policy, record the error and decide; do not silently turn retention off.
-- [ ] **Step 7:** Comment on the app PR with each worker's memory use (Grafana) and `kubectl -n directive-copilot get pods` output: the baseline for later milestones.
+- [ ] **Step 1:** OpenRouter: account, zero data retention off (ADR 0008: it disables the pinned first-party providers and free chat models), about $15 credit, auto top-up off, one API key.
+- [x] **Step 2:** `ansible-vault edit secret.yaml`: add both `kv-prod` paths (password and master key from `openssl rand -hex 32`; master key prefixed `sk-`). Run the runbook's **Seed**; Vault stays unsealed. This must precede the merge.
+- [x] **Step 3:** Merge the app PR. `prod-directive-copilot` is `Synced`/`Healthy`; all pods `Ready`; no node reports `DiskPressure`.
+- [x] **Step 4:** `kubectl -n directive-copilot exec postgres-0 -- psql -U copilot -d copilot -tAc "select default_version from pg_available_extensions where name='vector'"` prints `0.8.7`.
+- [x] **Step 5:** `kubectl -n directive-copilot create job backup-check --from=cronjob/postgres-backup` completes and its log names a `.dump` (the script has already run `pg_restore --list` on it).
+- [x] **Step 6:** Port-forward `svc/litellm 4000`. `chat`, `judge`, `chat-dev` answer `/v1/chat/completions`; `embed` returns 768 numbers from `/v1/embeddings`. OpenRouter's activity page shows OpenAI and Anthropic as providers. If `chat-dev` fails on data policy, record the error and check the account's training setting for free models.
+- [x] **Step 7:** Comment on the app PR with each worker's memory use (Grafana) and `kubectl -n directive-copilot get pods` output: the baseline for later milestones.
+
+### Task 8: HL, remove the `dev` cluster instead of pausing it (branch `feat/pause-dev-grow-prod`)
+
+Changes Task 2's result: the owner chose to destroy the two kubeadm VMs. Runs before Task 3.
+
+**Files:** `terraform/environments/dev/{main.tf,outputs.tf,dev.tftest.hcl}`, ADR 0034 and its index row (unmerged, may be renamed), ADR 0028 Status line, the "Pause and resume dev" runbook entry, and every doc note Task 2 added.
+
+- [x] **Step 1: Failing test.** `dev.tftest.hcl` asserts the root plans `claude-code` (name and vmid 102) and no longer expects kubeadm nodes. Run `terraform test`: FAIL while the outputs and module remain as they are.
+- [x] **Step 2:** Remove `module "kubeadm-dev"` and the outputs that only describe it. `module "claude_code"` is unchanged. Keep variables, `ansible/` dev files and `argocd/apps/*/dev/` so a rebuild is a restore from git; satisfy tflint without deleting what a rebuild needs. No `removed` or `moved` block: the destroy is intended.
+- [x] **Step 3:** `terraform test`, `terraform fmt -check`, `tflint`, `scripts/check-manifests.sh`, `scripts/check-runbooks.sh` pass.
+- [x] **Step 4:** ADR 0034 states: `dev` destroyed, how to rebuild, old `nfs-dev` directories remain on `nfs-01`, no staging.
+- [x] **Step 5:** Runbook: remove-`dev` entry (merge, confirm apps `Unknown`, delete apps, apply `dev` with exactly 2 destroy, grow `prod`) with the existing stop gates, never `terraform destroy` in this root; and a rebuild order (shrink `prod`, restore module, outputs, test, app entries and `clusters-dev.yaml`, apply, Ansible, register). Remove pause-only steps (`start_at_node_boot`, shutting down and starting VMs) and `-target` warnings in docs that no longer apply.
+- [x] **Step 6:** Commit `ops: remove dev cluster from terraform`.

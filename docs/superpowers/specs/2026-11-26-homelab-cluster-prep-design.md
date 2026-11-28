@@ -13,7 +13,7 @@ from the homelab repo's Terraform code and `.tfvars.example` files. Live
 | --- | --- | --- |
 | Talos `prod` control plane | 4 GB | 4 GB |
 | Talos `prod` workers (2) | 4 GB each | 7 GB each |
-| kubeadm `dev` control plane + worker | 3 GB each | shut down |
+| kubeadm `dev` control plane + worker | 3 GB each | destroyed |
 | `claude-code`, NFS, Vault VMs | 4 + 2 + 2 GB | unchanged |
 | LXCs (5) | 256 MB each | unchanged |
 | **Total of 32 GB** | **27.25 GB** | **27.25 GB** |
@@ -51,7 +51,9 @@ answering on all four aliases.
 ## Anti-goals
 
 - A secret in either public repo.
-- Destroying the `dev` VMs, their disks or their NFS data.
+- Destroying anything but the two kubeadm `dev` VMs. `claude-code` is defined
+  in the same Terraform root and must survive; `dev`'s old NFS directories
+  stay on `nfs-01`.
 - An existing `prod` app (jobboard, shortener, monitoring) losing data.
 - Terraform applied, VMs restarted or `main` merged by an agent.
 
@@ -76,7 +78,7 @@ answering on all four aliases.
 | Grow the `dev` worker | Disposable cluster, but taking memory from elsewhere leaves the host under 3 GB |
 | Existing `prod` workers as they are | Nothing to resize; 4 GB workers already run monitoring and jobboard |
 | New k3s VM | Matches the old plan; needs the most memory |
-| **Shut down `dev`, grow `prod`** (picked) | Same host commitment, survives like other real apps; no staging cluster |
+| **Destroy the `dev` cluster, grow `prod`** (picked) | Same host commitment, survives like other real apps; no staging cluster. First picked as a shutdown; the owner chose destroy, since nothing on `dev` is worth keeping |
 
 **Where manifests live**
 
@@ -93,8 +95,8 @@ answering on all four aliases.
    leftovers: drop the Kustomize half of `make check-infra` (and
    `setup-kubectl` in CI), and say in `README.md` which kube context the
    port-forwards use.
-2. **`homelab`, capacity:** retire `dev` from ArgoCD, set its VMs not to
-   start at boot, raise `prod` memory and cores, ADR and runbooks.
+2. **`homelab`, capacity:** retire `dev` from ArgoCD, remove its VMs from
+   Terraform, raise `prod` memory, cores and disks, ADR and runbooks.
 3. **`homelab`, app:** the `directive-copilot` app.
 
 ### Retiring `dev` (order matters)
@@ -105,10 +107,13 @@ answering on all four aliases.
    `dev-*` Applications **without cascade**: the ApplicationSet never deletes
    them itself, and a cascade would remove the workloads and their `nfs-dev`
    data.
-3. Shut the two VMs down. Keep disks.
+3. `terraform apply` in `environments/dev`: exactly 2 to destroy, nothing
+   else. Never `terraform destroy` that root.
 4. Only then raise `prod` memory, so the host is never over-committed.
 
-Reversal is the same steps backwards.
+Rebuilding: shrink `prod` first, restore the module and app entries from
+git, apply, run the Ansible playbooks, register the cluster. Volumes start
+empty.
 
 ### The app
 
@@ -128,17 +133,18 @@ model IDs against OpenRouter's current catalogue.
 
 ### Operator steps (only the owner can do these)
 
-OpenRouter account (zero data retention on, about $15, auto top-up off),
+OpenRouter account (zero data retention off for now, see ADR 0008; about
+$15, auto top-up off),
 secret values into `secret.yaml` and the Vault seed, PR merges, ArgoCD
-deletes, `terraform apply`, VM shutdowns and restarts, and a kube context
+deletes, `terraform apply`, VM restarts, and a kube context
 for `prod`. This repo's hook allows only a context named `homelab`: name it
 that, or set `DC_KUBE_CONTEXT`.
 
 ### Done when
 
 - `kubectl get nodes` shows three Ready nodes with the new sizes.
-- No `dev-*` Application remains; `dev` VMs are stopped; `jobs.mgryn.cc`
-  still serves.
+- No `dev-*` Application remains; `qm list` shows no 4101 or 4201 and
+  `claude-code` still runs; `jobs.mgryn.cc` still serves.
 - `directive-copilot` is Synced, Healthy, and its pods Ready.
 - `vector` appears in `pg_available_extensions` (the app's migration creates
   it later).
@@ -155,7 +161,7 @@ that, or set `DC_KUBE_CONTEXT`.
 - Postgres on NFS follows jobboard's precedent; it is not tested for this
   load.
 - Something in the homelab may still expect `dev` to be reachable
-  (playbooks, checks, dashboards). Search before shutting it down.
+  (playbooks, checks, dashboards). Search before destroying it.
 
 ## Open, not blocking
 

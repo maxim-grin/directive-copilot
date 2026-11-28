@@ -43,7 +43,7 @@ The same container image runs in both. Everything that differs is an environment
 
 **Homelab hardware:** one mini PC, Intel i5-10500T (6 cores, 35 W TDP), 32 GB DDR4, 1 TB SSD, **no GPU**. That decides what runs locally: Postgres, embeddings and the CPU decision model do; chat models don't.
 
-It runs Proxmox and is shared with other workloads. The app goes on the Talos `prod` cluster (one 4 GB control plane, two 7 GB workers, 4 vCPU each), delivered by ArgoCD from the [homelab](https://github.com/maxim-grin/homelab) repo ([ADR 0006](docs/decisions/0006-argocd-manifests-in-homelab-terraform-on-azure.md)).
+It runs Proxmox and is shared with other workloads. The app goes on the Talos `prod` cluster (one 4 GB control plane, two 7 GB workers, 4 vCPU each), delivered by ArgoCD from the [homelab](https://github.com/maxim-grin/homelab) repo ([ADR 0007](docs/decisions/0007-dev-cluster-destroyed-manifests-unchanged.md)).
 
 | Concern | homelab (stage 1) | azure (final stage) |
 |---|---|---|
@@ -406,7 +406,8 @@ AZURE_RESOURCE_GROUP=...
 | `chat-dev` | `openrouter/openrouter/free` (OpenRouter's free-model router) | not defined |
 | `embed` | `ollama/nomic-embed-text:v1.5` | Azure embedding deployment |
 
-- **Pin providers** in the OpenRouter aliases (provider routing, fallbacks off) so an eval run can't silently move between hosts. Turn on zero data retention in the OpenRouter account.
+- **Pin providers** in the OpenRouter aliases (provider routing, fallbacks off) so an eval run can't silently move between hosts.
+- **Zero data retention is off for now** ([ADR 0008](docs/decisions/0008-zero-data-retention-off-for-now.md)): try the direct providers first, and free models through OpenRouter. With it on, first-party OpenAI and Anthropic endpoints are disabled, which `chat` and `judge` are pinned to, and `chat-dev` has no free chat model (endpoint list read 2026-11-28). Providers may keep prompts and free ones may train on them, so send nothing private.
 - Check during milestone 0 that LiteLLM's model IDs match OpenRouter's current catalogue, and during milestone 8 that LiteLLM can reach Claude on Foundry; if not, point `judge` at the Anthropic API directly for the Azure stage.
 - **Billing:** buy OpenRouter credits manually, about $15 at a time (the 5.5% card fee has a $0.80 minimum, so smaller top-ups pay proportionally more), auto top-up off. Credits don't reset monthly; OpenRouter may expire them a year after purchase, and only refunds within 24 hours. Buying $10 or more also raises the free-model limit from 50 to 1,000 requests a day, which the `chat-dev` loop needs.
 
@@ -414,7 +415,7 @@ AZURE_RESOURCE_GROUP=...
 
 **Stage 1: homelab**
 
-0. **Cluster prep (half a day):** in the homelab repo: shut down the `dev` cluster, grow the `prod` workers to 7 GB and the nodes to 4 vCPU; add the `directive-copilot` app: namespace, Postgres + pgvector on `nfs-prod` + nightly `pg_dump` CronJob, Ollama with `nomic-embed-text` only (`OLLAMA_NUM_PARALLEL=1`, CPU limit), LiteLLM with `chat`/`judge`/`chat-dev`/`embed` aliases, secrets in Vault. OpenRouter account with zero data retention and ~$15 of credits. Check every alias with `curl`.
+0. **Cluster prep (half a day):** in the homelab repo: destroy the `dev` Kubernetes cluster, grow the `prod` workers to 7 GB and the nodes to 4 vCPU; add the `directive-copilot` app: namespace, Postgres + pgvector on `nfs-prod` + nightly `pg_dump` CronJob, Ollama with `nomic-embed-text` only (`OLLAMA_NUM_PARALLEL=1`, CPU limit), LiteLLM with `chat`/`judge`/`chat-dev`/`embed` aliases, secrets in Vault. OpenRouter account with ~$15 of credits. Check every alias with `curl`.
 1. **Skeleton (1.5h):** FastAPI hello + health checks, alembic migrations, Vite React app, multi-stage Dockerfile, image published to GHCR, app and migrations added to the homelab app, app reachable through the Ingress.
 2. **Ingest (1.5h):** parse 2 directives (current editions), chunk, record edition date, embed, run as a Job, verify with a raw similarity query.
 3. **Graph happy path (2h):** retrieve → answer → respond with citations on `/`, built against `chat-dev`; structured output + Pydantic validation + one retry; then switch to `chat` and check cost per answer.
