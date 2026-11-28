@@ -74,8 +74,8 @@ Keep every `argocd/apps/*/dev/` directory, `argocd/apps/clusters/dev/` and the V
 
 Runs after Task 8. The homelab runbook entry for removing `dev` holds the commands and stop gates and wins over this summary.
 
-- [ ] **Step 1:** On `pve`, `lvs` shows the thin pool has well over 60 GB free after the `dev` disks go (three `prod` disks grow by 20 GB). In `prod.tfvars`, set both workers to 7168 and remove or update any `node_cores` / `node_disk_size` override.
-- [ ] **Step 2:** Dump jobboard's database.
+- [x] **Step 1:** On `pve`, `lvs` shows the thin pool has well over 60 GB free after the `dev` disks go (three `prod` disks grow by 20 GB). In `prod.tfvars`, set both workers to 7168 and remove or update any `node_cores` / `node_disk_size` override.
+- [x] **Step 2:** Dump jobboard's database. Skipped: the owner reports it was empty.
 - [x] **Step 3:** Merge the capacity PR. Expected: `clusters-dev` is gone; `dev-*` apps show `Unknown`.
 - [x] **Step 4:** Only then, delete the eight `dev-*` Applications, finalizers removed first.
 - [x] **Step 5:** `terraform apply` in `environments/dev`: 0 add, 0 change, **2 destroy** (4101 and 4201 only; nothing named `claude_code`). Anything else is a stop. Never `terraform destroy` this root.
