@@ -1,6 +1,6 @@
 # 0005: Hosted LLMs, the same models in both environments
 
-Status: Accepted
+Status: Superseded by [0008](0008-zero-data-retention-off-for-now.md)
 Date: 2026-11-25
 
 ## Context

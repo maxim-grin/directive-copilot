@@ -33,7 +33,7 @@
 2. **LiteLLM silently drops provider pinning**, so evals later move between hosts. Expect the upstream request to carry it (Task 6).
 3. **A failed dump counts as a backup** or rotates good ones away. Expect a non-zero exit and nothing pruned (Task 4).
 4. **Pod restart with no internet.** Ollama must start from the model already on its volume (Task 5).
-5. **`chat-dev` fails under zero data retention**: free providers may be excluded. Expect a clear result and an owner decision, not a quietly relaxed setting (Task 7).
+5. **`chat-dev` fails on data policy**: free providers may be excluded by account settings, even with zero data retention off (ADR 0008). Expect a clear result and an owner decision (Task 7).
 
 ---
 
@@ -158,12 +158,12 @@ OpenRouter entries use `api_key: os.environ/OPENROUTER_API_KEY`; `general_settin
 
 ### Task 7: Owner, secrets, deploy and prove
 
-- [ ] **Step 1:** OpenRouter: account, zero data retention on, about $15 credit, auto top-up off, one API key.
+- [ ] **Step 1:** OpenRouter: account, zero data retention off (ADR 0008: it disables the pinned first-party providers and free chat models), about $15 credit, auto top-up off, one API key.
 - [x] **Step 2:** `ansible-vault edit secret.yaml`: add both `kv-prod` paths (password and master key from `openssl rand -hex 32`; master key prefixed `sk-`). Run the runbook's **Seed**; Vault stays unsealed. This must precede the merge.
 - [x] **Step 3:** Merge the app PR. `prod-directive-copilot` is `Synced`/`Healthy`; all pods `Ready`; no node reports `DiskPressure`.
 - [x] **Step 4:** `kubectl -n directive-copilot exec postgres-0 -- psql -U copilot -d copilot -tAc "select default_version from pg_available_extensions where name='vector'"` prints `0.8.7`.
 - [x] **Step 5:** `kubectl -n directive-copilot create job backup-check --from=cronjob/postgres-backup` completes and its log names a `.dump` (the script has already run `pg_restore --list` on it).
-- [ ] **Step 6:** Port-forward `svc/litellm 4000`. `chat`, `judge`, `chat-dev` answer `/v1/chat/completions`; `embed` returns 768 numbers from `/v1/embeddings`. OpenRouter's activity page shows OpenAI and Anthropic as providers. If `chat-dev` fails on data policy, record the error and decide; do not silently turn retention off.
+- [ ] **Step 6:** Port-forward `svc/litellm 4000`. `chat`, `judge`, `chat-dev` answer `/v1/chat/completions`; `embed` returns 768 numbers from `/v1/embeddings`. OpenRouter's activity page shows OpenAI and Anthropic as providers. If `chat-dev` fails on data policy, record the error and check the account's training setting for free models.
 - [ ] **Step 7:** Comment on the app PR with each worker's memory use (Grafana) and `kubectl -n directive-copilot get pods` output: the baseline for later milestones.
 
 ### Task 8: HL, remove the `dev` cluster instead of pausing it (branch `feat/pause-dev-grow-prod`)

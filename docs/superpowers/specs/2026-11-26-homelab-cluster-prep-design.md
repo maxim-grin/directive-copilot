@@ -133,7 +133,8 @@ model IDs against OpenRouter's current catalogue.
 
 ### Operator steps (only the owner can do these)
 
-OpenRouter account (zero data retention on, about $15, auto top-up off),
+OpenRouter account (zero data retention off for now, see ADR 0008; about
+$15, auto top-up off),
 secret values into `secret.yaml` and the Vault seed, PR merges, ArgoCD
 deletes, `terraform apply`, VM restarts, and a kube context
 for `prod`. This repo's hook allows only a context named `homelab`: name it
